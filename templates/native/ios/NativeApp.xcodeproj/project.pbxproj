@@ -9,7 +9,10 @@
 /* Begin PBXBuildFile section */
 		B20100000000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000011 /* AppDelegate.swift */; };
 		B20100000000000000000002 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000012 /* SceneDelegate.swift */; };
+		B20100000000000000000003 /* path-configuration.json in Resources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000014 /* path-configuration.json */; };
 		B20100000000000000000004 /* HotwireNative in Frameworks */ = {isa = PBXBuildFile; productRef = B20100000000000000000021 /* HotwireNative */; };
+		B20100000000000000000005 /* BridgeComponents in Frameworks */ = {isa = PBXBuildFile; productRef = B20100000000000000000022 /* BridgeComponents */; };
+		B20100000000000000000007 /* TabConfigurationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000016 /* TabConfigurationProvider.swift */; };%NATIVE_NOTIF_PBX_BUILDFILE%
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +20,8 @@
 		B20100000000000000000011 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B20100000000000000000012 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		B20100000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B20100000000000000000014 /* path-configuration.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "path-configuration.json"; sourceTree = "<group>"; };
+		B20100000000000000000016 /* TabConfigurationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabConfigurationProvider.swift; sourceTree = "<group>"; };%NATIVE_NOTIF_PBX_FILEREF%
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -25,6 +30,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B20100000000000000000004 /* HotwireNative in Frameworks */,
+				B20100000000000000000005 /* BridgeComponents in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -44,7 +50,9 @@
 			children = (
 				B20100000000000000000011 /* AppDelegate.swift */,
 				B20100000000000000000012 /* SceneDelegate.swift */,
+				B20100000000000000000016 /* TabConfigurationProvider.swift */,%NATIVE_NOTIF_PBX_GROUP%
 				B20100000000000000000013 /* Info.plist */,
+				B20100000000000000000014 /* path-configuration.json */,
 			);
 			path = NativeApp;
 			sourceTree = "<group>";
@@ -75,6 +83,7 @@
 			name = NativeApp;
 			packageProductDependencies = (
 				B20100000000000000000021 /* HotwireNative */,
+				B20100000000000000000022 /* BridgeComponents */,
 			);
 			productName = NativeApp;
 			productReference = B20100000000000000000010 /* NativeApp.app */;
@@ -106,6 +115,7 @@
 			mainGroup = B20100000000000000000040;
 			packageReferences = (
 				B20100000000000000000020 /* XCRemoteSwiftPackageReference "hotwire-native-ios" */,
+				B20100000000000000000023 /* XCRemoteSwiftPackageReference "bridge-components" */,
 			);
 			productRefGroup = B20100000000000000000042 /* Products */;
 			projectDirPath = "";
@@ -121,6 +131,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20100000000000000000003 /* path-configuration.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,6 +144,7 @@
 			files = (
 				B20100000000000000000001 /* AppDelegate.swift in Sources */,
 				B20100000000000000000002 /* SceneDelegate.swift in Sources */,
+				B20100000000000000000007 /* TabConfigurationProvider.swift in Sources */,%NATIVE_NOTIF_PBX_SOURCES%
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -149,7 +161,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -167,7 +179,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -177,7 +189,7 @@
 		B20100000000000000000072 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Automatic;%NATIVE_NOTIF_PBX_ENTITLEMENTS%%NATIVE_IOS_TEAM%
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NativeApp/Info.plist;
@@ -199,7 +211,7 @@
 		B20100000000000000000073 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Automatic;%NATIVE_NOTIF_PBX_ENTITLEMENTS%%NATIVE_IOS_TEAM%
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NativeApp/Info.plist;
@@ -250,6 +262,14 @@
 				minimumVersion = 1.2.2;
 			};
 		};
+		B20100000000000000000023 /* XCRemoteSwiftPackageReference "bridge-components" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/joemasilotti/bridge-components";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.13.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -257,6 +277,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B20100000000000000000020 /* XCRemoteSwiftPackageReference "hotwire-native-ios" */;
 			productName = HotwireNative;
+		};
+		B20100000000000000000022 /* BridgeComponents */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20100000000000000000023 /* XCRemoteSwiftPackageReference "bridge-components" */;
+			productName = BridgeComponents;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

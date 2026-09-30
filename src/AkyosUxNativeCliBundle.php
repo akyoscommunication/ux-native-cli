@@ -3,6 +3,7 @@
 namespace Akyos\UxNativeCliBundle;
 
 use Akyos\UxNativeCliBundle\Service\InitScaffolder;
+use Akyos\UxNativeCliBundle\Service\OfflineScaffolder;
 use Akyos\UxNativeCliBundle\Command\NativeQrInstallCommand;
 use Akyos\UxNativeCliBundle\Service\NativeAndroidApkLocator;
 use Akyos\UxNativeCliBundle\Service\NativeBuildRunner;
@@ -30,6 +31,14 @@ class AkyosUxNativeCliBundle extends AbstractBundle
                 ->scalarNode('android_gradle_task')->defaultValue('assembleDebug')->end()
                 ->scalarNode('ios_scheme')->defaultValue('NativeApp')->end()
                 ->scalarNode('ios_project')->defaultValue('NativeApp.xcodeproj')->end()
+                ->scalarNode('ios_development_team')
+                    ->defaultNull()
+                    ->info('Apple Team ID (10 caractères), réinjecté dans DEVELOPMENT_TEAM à chaque native:init')
+                    ->validate()
+                        ->ifTrue(static fn ($v) => null !== $v && !preg_match('/^[A-Z0-9]{10}$/', (string) $v))
+                        ->thenInvalid('native.ios_development_team doit être un Team ID Apple de 10 caractères (A-Z, 0-9), reçu %s.')
+                    ->end()
+                ->end()
                 ->scalarNode('ios_product_name')->defaultNull()->end()
                 ->scalarNode('ios_derived_data_path')->defaultNull()->end()
                 ->scalarNode('android_home')->defaultNull()->end()
@@ -44,6 +53,10 @@ class AkyosUxNativeCliBundle extends AbstractBundle
         $container->services()
             ->get(InitScaffolder::class)
             ->arg('$config', $config)
+            ->arg('$bundleRoot', $this->getPath());
+
+        $container->services()
+            ->get(OfflineScaffolder::class)
             ->arg('$bundleRoot', $this->getPath());
 
         $container->services()

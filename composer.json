@@ -17,7 +17,8 @@
         "symfony/yaml": "^7.0|^8.0"
     },
     "suggest": {
-        "symfony/ux-native": "Server-side native detection and JSON path configuration for Hotwire Native"
+        "symfony/ux-native": "Server-side native detection and JSON path configuration for Hotwire Native",
+        "spomky-labs/pwa-bundle": "Workbox et service worker pour native:init --offline"
     },
     "autoload": {
         "psr-4": {

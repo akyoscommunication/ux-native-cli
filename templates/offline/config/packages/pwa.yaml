@@ -1,0 +1,41 @@
+pwa:
+    manifest:
+        enabled: true
+        name: '%NATIVE_APP_NAME%'
+        short_name: '%NATIVE_APP_NAME%'
+    serviceworker:
+        enabled: true
+        skip_waiting: true
+        workbox:
+            enabled: true
+            use_cdn: false
+            cache_manifest: true
+            clear_cache: false
+            navigation_preload: false
+            image_cache:
+                enabled: true
+                regex: '/\.(ico|png|jpe?g|gif|svg|webp|bmp)$/'
+                max_entries: 500
+            font_cache:
+                enabled: true
+                regex: '/\.(ttf|eot|otf|woff2)$/'
+                max_entries: 100
+            asset_cache:
+                enabled: true
+                regex: '/\.(css|js|json|xml|txt|map)$/'
+            resource_caches:
+                - match_callback: |
+                      ({request}) => {
+                          if (request.method !== 'GET') return false;
+                          const accept = request.headers.get('Accept') || '';
+                          if (accept.includes('text/vnd.turbo-stream.html')) return false;
+                          if (request.headers.get('Turbo-Frame')) return false;
+                          return request.mode === 'navigate' || accept.includes('text/html');
+                      }
+                  cache_name: pages
+                  strategy: NetworkFirst
+                  network_timeout: 3
+                  preload_urls:
+                      - 'native_offline'
+            offline_fallback:
+                page: native_offline

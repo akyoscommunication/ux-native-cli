@@ -238,6 +238,7 @@ class NativeBuildRunner
             '-derivedDataPath', $derived,
         ];
         if ($forPhysicalDevice) {
+            $command[] = '-allowProvisioningUpdates';
             $command[] = '-sdk';
             $command[] = 'iphoneos';
             if (null !== $explicitDeviceUdid && '' !== $explicitDeviceUdid) {

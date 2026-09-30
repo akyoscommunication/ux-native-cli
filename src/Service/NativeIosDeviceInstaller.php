@@ -119,8 +119,8 @@ class NativeIosDeviceInstaller
         $conn = $node['connectionProperties'] ?? null;
         if (\is_array($conn)) {
             $tunnel = (string) ($conn['tunnelState'] ?? '');
-            $pairing = (string) ($conn['pairingState'] ?? '');
-            $connected = 'connected' === $tunnel || 'paired' === $pairing;
+            // pairingState reste "paired" longtemps après débranchement ; seul le tunnel dit si Xcode peut builder dessus.
+            $connected = 'connected' === $tunnel;
             $name = '';
             if (isset($node['deviceProperties']) && \is_array($node['deviceProperties'])) {
                 $name = trim((string) ($node['deviceProperties']['name'] ?? ''));

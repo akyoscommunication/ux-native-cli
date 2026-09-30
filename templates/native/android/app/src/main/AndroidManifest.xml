@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.INTERNET" />%NATIVE_NOTIF_ANDROID_PERMISSION%
 
     <application
+        android:name=".NativeApplication"
         android:allowBackup="true"
         android:label="@string/app_name"
         android:usesCleartextTraffic="true"
@@ -12,11 +13,11 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize">
+            android:configChanges="orientation|screenSize"%NATIVE_NOTIF_ANDROID_LAUNCH_MODE%>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity>%NATIVE_NOTIF_ANDROID_SERVICE%
     </application>
 </manifest>

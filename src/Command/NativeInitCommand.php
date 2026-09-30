@@ -26,7 +26,9 @@ class NativeInitCommand extends Command
             ->addOption('app-name', null, InputOption::VALUE_REQUIRED)
             ->addOption('url', null, InputOption::VALUE_REQUIRED)
             ->addOption('application-id', null, InputOption::VALUE_REQUIRED)
-            ->addOption('bundle-id', null, InputOption::VALUE_REQUIRED);
+            ->addOption('bundle-id', null, InputOption::VALUE_REQUIRED)
+            ->addOption('offline', null, InputOption::VALUE_NONE, 'Active Workbox/PWA (service worker, cache pages, réglages iOS WKAppBoundDomains)')
+            ->addOption('notification', null, InputOption::VALUE_NONE, 'Ajoute le bridge notification-token (APNs sur iOS, FCM sur Android)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -39,6 +41,12 @@ class NativeInitCommand extends Command
             'bundle_id' => $input->getOption('bundle-id'),
         ], static fn ($v) => null !== $v && '' !== $v);
 
-        return $this->initScaffolder->scaffold($overrides, (bool) $input->getOption('force'), $io);
+        return $this->initScaffolder->scaffold(
+            $overrides,
+            (bool) $input->getOption('force'),
+            (bool) $input->getOption('offline'),
+            $io,
+            (bool) $input->getOption('notification'),
+        );
     }
 }
