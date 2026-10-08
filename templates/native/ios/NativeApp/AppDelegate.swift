@@ -8,7 +8,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        Hotwire.registerBridgeComponents(Bridgework.coreComponents%NATIVE_NOTIF_IOS_COMPONENTS%)%NATIVE_NOTIF_IOS_SETUP%
+        Hotwire.registerBridgeComponents(Bridgework.coreComponents%NATIVE_NOTIF_IOS_COMPONENTS%%NATIVE_BARCODE_IOS_COMPONENTS%%NATIVE_ADMOB_IOS_COMPONENTS%)%NATIVE_NOTIF_IOS_SETUP%
 
         let localPathConfigURL = Bundle.main.url(forResource: "path-configuration", withExtension: "json")!
         let remotePathConfigURL = URL(string: "%NATIVE_BASE_URL%/config/ios_v1.json")!

@@ -47,6 +47,6 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
-	</dict>
+	</dict>%NATIVE_IOS_PLIST_EXTRA%
 </dict>
 </plist>

@@ -20,6 +20,8 @@ Le bundle génère des projets natifs prêts à compiler, puis les builde et les
 3. [Ce qui est généré](#ce-qui-est-généré)
 4. [Onglets et navigation, pilotés par Symfony](#onglets-et-navigation-pilotés-par-symfony)
 5. [`native:init` et ses options](#nativeinit-et-ses-options)
+   - [Scan de QR code](#scan-de-qr-code---barcode-scanner)
+   - [Publicités AdMob](#publicités-admob---admob)
 6. [`native:build`](#nativebuild)
 7. [`native:qr-install` et `native:dev`](#nativeqr-install-et-nativedev)
 8. [Signature iOS](#signature-ios)
@@ -160,13 +162,15 @@ final class AppNativeConfiguration
 ## `native:init` et ses options
 
 ```bash
-php bin/console native:init [--force] [--offline] [--notification]
+php bin/console native:init [--force] [--offline] [--notification] [--barcode-scanner] [--admob]
 ```
 
 | Option | Effet |
 | --- | --- |
 | `--force` | Supprime et régénère `native/android` et `native/ios` (voir l'avertissement plus haut). Sans cette option, les dossiers doivent être vides. |
 | `--notification` | Ajoute les notifications push (ci-dessous). Sans cette option, l'app ne contient **aucun** code de notification. |
+| `--barcode-scanner` | Ajoute le scan de QR code par le shell natif (ci-dessous). |
+| `--admob` | Ajoute les publicités Google AdMob affichées par le shell natif (ci-dessous). |
 | `--offline` | Mode hors ligne : installe `spomky-labs/pwa-bundle`, crée `config/packages/pwa.yaml` et une page `/offline`, ajoute `{{ pwa() }}` au layout, et autorise les service workers sur iOS. Pensez ensuite à `cache:clear`. |
 | `--app-name`, `--url`, `--application-id`, `--bundle-id` | Remplacent la valeur de `native.yaml`, pour cette exécution uniquement. |
 
@@ -203,6 +207,65 @@ L'événement `bridge--notification-token:retrieved` contient `event.detail.toke
 **À faire de votre côté :**
 - **Android :** créez une app Android dans [Firebase](https://console.firebase.google.com/), avec **le même package que `application_id`**. Déposez son `google-services.json` dans `native/android/app/`. Sans ce fichier, le build passe, mais aucun token n'est renvoyé.
 - **iOS :** renseignez `ios_development_team` avec une Team **payante** (voir [Signature iOS](#signature-ios)) et testez sur un vrai iPhone. Le simulateur ne reçoit pas de token.
+
+### Scan de QR code (`--barcode-scanner`)
+
+Le shell ouvre la caméra et renvoie le contenu du QR. Dans un navigateur, le contrôleur ne se charge pas : gardez un repli (saisie du code).
+
+| | iOS | Android |
+| --- | --- | --- |
+| Écran de scan | `BarcodeScannerComponent.swift` (AVFoundation) | Google code scanner (`play-services-code-scanner`) |
+| Autorisation | `NSCameraUsageDescription` (`native.camera_usage_description`) | Aucune permission `CAMERA` : l'écran est dessiné par les services Google Play |
+| Réponse | `{"code": "…"}`, ou sans code si le scan est fermé ou refusé | Idem. Sans services Google Play (certains Huawei), aucun code n'est renvoyé |
+
+```twig
+<div data-controller="bridge--barcode-scanner"
+     data-bridge--barcode-scanner-auto-value="true"
+     data-action="bridge--barcode-scanner:scanned->mon-controleur#utiliserLeCode">
+    <button type="button" data-action="bridge--barcode-scanner#scan">Scanner</button>
+</div>
+```
+
+`bridge--barcode-scanner:scanned` contient `event.detail.code`. `:cancelled` est émis si le scan est fermé. `auto` ouvre le scan dès l'apparition de l'élément.
+
+Le contrôleur est copié dans `assets/controllers/bridge/`. Avec `--notification`, le contrôleur homonyme de `@joemasilotti/bridge-components` (contrat `barcode`, pas `code`) est retiré du chargement.
+
+Le simulateur iOS n'a pas de caméra : le scan réel se vérifie sur un iPhone.
+
+### Publicités AdMob (`--admob`)
+
+Un seul composant pour les formats rewarded, interstitiel, bannière et native. L'identifiant d'**app** est écrit dans le manifeste (il change avec `native:init --force`). L'identifiant de **bloc d'annonces** est envoyé par la page à chaque demande.
+
+| Événement | Donnée | Réponse |
+| --- | --- | --- |
+| `rewarded` | `{adUnitId}` | `{status: "earned", reward}` si la pub est vue jusqu'au bout, sinon `{status: "dismissed"}` |
+| `interstitial` | `{adUnitId}` | `{status: "dismissed"}` à la fermeture |
+| `banner` | `{adUnitId, position}` | `{status: "loaded", height}` |
+| `native` | `{adUnitId, position}` | `{status: "loaded", height}` |
+| `hide` | — | retire la bannière ou la pub native |
+
+Tout format peut répondre `{status: "failed", error}`. `position` vaut `"top"` ou `"bottom"`.
+
+```twig
+<div data-controller="bridge--admob"
+     data-bridge--admob-android-unit-value="ca-app-pub-…/…"
+     data-bridge--admob-ios-unit-value="ca-app-pub-…/…">
+    <button data-action="bridge--admob#rewarded bridge--admob:earned->mon-controleur#recompenser">Regarder une pub</button>
+    <p hidden data-bridge--admob-target="error">Pas de pub disponible.</p>
+</div>
+```
+
+Par défaut, `native.admob.android_app_id` et `native.admob.ios_app_id` sont les identifiants d'app **de test** de Google. Les blocs de test, à mettre dans la page :
+
+| Format | Android | iOS |
+| --- | --- | --- |
+| App | `ca-app-pub-3940256099942544~3347511713` | `ca-app-pub-3940256099942544~1458002511` |
+| Bannière | `ca-app-pub-3940256099942544/9214589741` | `ca-app-pub-3940256099942544/2435281174` |
+| Interstitiel | `ca-app-pub-3940256099942544/1033173712` | `ca-app-pub-3940256099942544/4411468910` |
+| Rewarded | `ca-app-pub-3940256099942544/5224354917` | `ca-app-pub-3940256099942544/1712485313` |
+| Native | `ca-app-pub-3940256099942544/2247696110` | `ca-app-pub-3940256099942544/3986624511` |
+
+Sans identifiant d'app dans le manifeste, l'application s'arrête au lancement. En développement, restez sur les identifiants de test.
 
 ---
 
@@ -313,6 +376,9 @@ La Team doit aussi apparaître dans Xcode → *Settings → Accounts*, **sans cr
 | `application_id` | `com.example.nativeapp` | Identifiant Android. Le package Kotlin est déplacé en conséquence. |
 | `bundle_id` | `com.example.nativeapp` | Identifiant iOS. |
 | `ios_development_team` | `null` | Team ID Apple (10 caractères). Requis pour un iPhone et pour le push. |
+| `camera_usage_description` | `Scanner un QR code.` | Texte de `NSCameraUsageDescription`, écrit avec `--barcode-scanner`. |
+| `admob.android_app_id` | identifiant de test Google | Identifiant d'app AdMob Android (`ca-app-pub-…~…`), écrit avec `--admob`. |
+| `admob.ios_app_id` | identifiant de test Google | Identifiant d'app AdMob iOS (`ca-app-pub-…~…`), écrit avec `--admob`. |
 | `android_home` | `null` | SDK Android. Sinon `ANDROID_HOME`, puis les emplacements usuels. |
 | `java_home` | `null` | JDK utilisé par Gradle. Sinon `JAVA_HOME`. |
 | `android_path` | `null` | Dossier du projet Android. Par défaut `native/android`. |

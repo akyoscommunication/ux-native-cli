@@ -48,5 +48,5 @@ dependencies {
     implementation("dev.hotwire:core:1.2.7")
     implementation("dev.hotwire:navigation-fragments:1.2.7")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("com.github.joemasilotti:bridge-components:0.13.2")%NATIVE_NOTIF_GRADLE_APP_DEPS%
+    implementation("com.github.joemasilotti:bridge-components:0.13.2")%NATIVE_NOTIF_GRADLE_APP_DEPS%%NATIVE_BARCODE_GRADLE_DEPS%%NATIVE_ADMOB_GRADLE_DEPS%
 }

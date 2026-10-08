@@ -28,7 +28,9 @@ class NativeInitCommand extends Command
             ->addOption('application-id', null, InputOption::VALUE_REQUIRED)
             ->addOption('bundle-id', null, InputOption::VALUE_REQUIRED)
             ->addOption('offline', null, InputOption::VALUE_NONE, 'Active Workbox/PWA (service worker, cache pages, réglages iOS WKAppBoundDomains)')
-            ->addOption('notification', null, InputOption::VALUE_NONE, 'Ajoute le bridge notification-token (APNs sur iOS, FCM sur Android)');
+            ->addOption('notification', null, InputOption::VALUE_NONE, 'Ajoute le bridge notification-token (APNs sur iOS, FCM sur Android)')
+            ->addOption('barcode-scanner', null, InputOption::VALUE_NONE, 'Ajoute le bridge barcode-scanner (scan de QR code par le shell natif)')
+            ->addOption('admob', null, InputOption::VALUE_NONE, 'Ajoute le bridge admob (publicités Google AdMob affichées par le shell natif)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -47,6 +49,8 @@ class NativeInitCommand extends Command
             (bool) $input->getOption('offline'),
             $io,
             (bool) $input->getOption('notification'),
+            (bool) $input->getOption('barcode-scanner'),
+            (bool) $input->getOption('admob'),
         );
     }
 }
