@@ -2,7 +2,7 @@
     "name": "akyos/ux-native-cli",
     "description": "Console commands to scaffold and build Hotwire Native shells for Symfony apps",
     "type": "symfony-bundle",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "license": "MIT",
     "require": {
         "php": ">=8.2",
