@@ -131,7 +131,7 @@ native/
 - Les valeurs de `native.yaml` sont écrites dans le code entre des marqueurs, par exemple `/*###url###*/"http://192.168.1.249:8003"/*###url###*/`. `native:update:config` et `native:build` ne remplacent que la valeur : le reste du fichier, y compris vos modifications, est conservé.
 - Le package Kotlin est déplacé automatiquement pour correspondre à `application_id`.
 - Les bridge components de [@joemasilotti/bridge-components](https://github.com/joemasilotti/bridge-components) (`bridge--*`) sont préinstallés côté natif.
-- En debug, le cache du WebView est désactivé sur les deux plateformes : vos changements HTML et JavaScript apparaissent au prochain lancement.
+- En debug uniquement, le cache du WebView est désactivé sur les deux plateformes : vos changements HTML et JavaScript apparaissent au prochain lancement. Seuls les caches sont vidés : les cookies (donc la session), le stockage local et les service workers sont conservés. Un build de release garde son cache. Un projet généré en 0.5, qui vidait tout à chaque lancement, est corrigé par `native:update:config`.
 
 > **Attention à `--force`.** Il **supprime** `native/android` et `native/ios` avant de les régénérer, y compris vos modifications manuelles et `google-services.json`. Sauvegardez ce fichier avant, puis remettez-le.
 

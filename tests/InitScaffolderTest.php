@@ -51,7 +51,9 @@ final class InitScaffolderTest extends TestCase
 
             self::assertStringNotContainsString('%NATIVE_', $all);
             self::assertStringContainsString('LOAD_NO_CACHE', $all);
-            self::assertStringContainsString('WKWebsiteDataStore', $all);
+            self::assertStringContainsString('FLAG_DEBUGGABLE', $all);
+            self::assertStringContainsString('WKWebsiteDataTypeDiskCache', $all);
+            self::assertStringNotContainsString('allWebsiteDataTypes', $all);
             self::assertSame(2, substr_count($all, 'DEVELOPMENT_TEAM = ABCDE12345;'));
             self::assertSame($notification, str_contains($all, 'notification-token'));
             self::assertSame($notification, str_contains($all, 'google-services'));
