@@ -3,7 +3,9 @@
 namespace Akyos\UxNativeCliBundle;
 
 use Akyos\UxNativeCliBundle\Service\InitScaffolder;
+use Akyos\UxNativeCliBundle\Service\NativeProjectUpdater;
 use Akyos\UxNativeCliBundle\Service\OfflineScaffolder;
+use Akyos\UxNativeCliBundle\Command\NativeUpdateConfigCommand;
 use Akyos\UxNativeCliBundle\Command\NativeQrInstallCommand;
 use Akyos\UxNativeCliBundle\Service\NativeAndroidApkLocator;
 use Akyos\UxNativeCliBundle\Service\NativeBuildRunner;
@@ -42,7 +44,23 @@ class AkyosUxNativeCliBundle extends AbstractBundle
                 ->scalarNode('camera_usage_description')
                     ->defaultValue('Scanner un QR code.')
                     ->cannotBeEmpty()
-                    ->info('Texte iOS NSCameraUsageDescription, écrit avec native:init --barcode-scanner')
+                    ->info('Texte iOS NSCameraUsageDescription, écrit avec le pont barcode-scanner')
+                ->end()
+                ->booleanNode('top_bar')
+                    ->defaultTrue()
+                    ->info('Affiche la barre du haut native. false la masque sur iOS et Android.')
+                ->end()
+                ->scalarNode('icon')
+                    ->defaultNull()
+                    ->info('Image carrée (1024 px ou plus) copiée dans les icônes Android et iOS par native:update:config')
+                ->end()
+                ->scalarNode('icon_background')
+                    ->defaultValue('#FFFFFF')
+                    ->info('Couleur de fond de l\'icône adaptative Android (#RRGGBB), derrière native.icon')
+                    ->validate()
+                        ->ifTrue(static fn ($v) => !preg_match('/^#[0-9A-Fa-f]{6}$/', (string) $v))
+                        ->thenInvalid('native.icon_background doit être une couleur #RRGGBB, reçu %s.')
+                    ->end()
                 ->end()
                 ->arrayNode('admob')
                     ->addDefaultsIfNotSet()
@@ -71,6 +89,21 @@ class AkyosUxNativeCliBundle extends AbstractBundle
             ->end();
     }
 
+    public function prependExtension(ContainerConfigurator $container, ContainerBuilder $builder): void
+    {
+        if (!interface_exists(\Symfony\Component\AssetMapper\AssetMapperInterface::class)) {
+            return;
+        }
+
+        $builder->prependExtensionConfig('framework', [
+            'asset_mapper' => [
+                'paths' => [
+                    $this->getPath().'/assets' => '@akyos/ux-native-cli',
+                ],
+            ],
+        ]);
+    }
+
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $container->import($this->getPath().'/config/services.yaml');
@@ -79,6 +112,14 @@ class AkyosUxNativeCliBundle extends AbstractBundle
             ->get(InitScaffolder::class)
             ->arg('$config', $config)
             ->arg('$bundleRoot', $this->getPath());
+
+        $container->services()
+            ->get(NativeProjectUpdater::class)
+            ->arg('$bundleRoot', $this->getPath());
+
+        $container->services()
+            ->get(NativeUpdateConfigCommand::class)
+            ->arg('$config', $config);
 
         $container->services()
             ->get(OfflineScaffolder::class)

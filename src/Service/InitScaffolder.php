@@ -28,6 +28,7 @@ class InitScaffolder
         private array $config,
         private string $bundleRoot,
         private OfflineScaffolder $offlineScaffolder,
+        private NativeProjectUpdater $projectUpdater,
     ) {
     }
 
@@ -89,13 +90,14 @@ class InitScaffolder
             $this->filesystem->chmod($gradlew, 0755);
         }
 
+        $this->projectUpdater->apply($config, $projectDir, $androidTarget, $iosTarget, $io, $notification, $barcodeScanner, $admob);
+
         $this->resolveIosPackageDependencies($iosTarget, $config, $io);
 
         $io->success('Native shells scaffolded.');
         $io->note('Open the Android project in Android Studio and the iOS project in Xcode. See https://native.hotwired.dev/ for Hotwire Native setup.');
 
         if ($notification) {
-            $this->installBridgeComponentsJs($projectDir, $io, $barcodeScanner);
             $io->note([
                 'Bridge notification-token ajouté : utilisez data-controller="bridge--notification-token" et data-action="bridge--notification-token#get" (voir le README du bundle).',
                 'Android : déposez google-services.json (projet Firebase) dans '.Path::join($androidTarget, 'app').' — sans lui, le build passe mais aucun token FCM.',
@@ -103,18 +105,13 @@ class InitScaffolder
             ]);
         }
 
-        if ($barcodeScanner || $admob) {
-            $this->requireImportmapPackages($projectDir, ['@hotwired/hotwire-native-bridge'], $io);
-        }
         if ($barcodeScanner) {
-            $this->installStimulusController($projectDir, Path::join($this->bundleRoot, self::TEMPLATE_BARCODE, 'web', 'barcode_scanner_controller.js'), 'barcode_scanner_controller.js', $io);
             $io->note('Bridge barcode-scanner ajouté : data-controller="bridge--barcode-scanner" et data-action="bridge--barcode-scanner#scan" (voir le README du bundle).');
         }
         if ($admob) {
-            $this->installStimulusController($projectDir, Path::join($this->bundleRoot, self::TEMPLATE_ADMOB, 'web', 'admob_controller.js'), 'admob_controller.js', $io);
             $io->note([
                 'Bridge admob ajouté : data-controller="bridge--admob" (voir le README du bundle).',
-                'Identifiants d\'app AdMob écrits dans le manifeste : valeurs de test Google par défaut. Remplacez native.admob.android_app_id et native.admob.ios_app_id avant la production, puis relancez native:init --force.',
+                'Identifiants d\'app AdMob écrits dans le manifeste. Changez native.admob.android_app_id et native.admob.ios_app_id puis lancez native:update:config.',
             ]);
         }
 
@@ -158,18 +155,15 @@ class InitScaffolder
         $metadata = '';
         $plist = '';
         if ($barcodeScanner) {
-            $metadata .= "\n        <meta-data android:name=\"com.google.mlkit.vision.DEPENDENCIES\" android:value=\"barcode_ui\" />";
-            $description = htmlspecialchars((string) ($config['camera_usage_description'] ?? 'Scanner un QR code.'), \ENT_XML1 | \ENT_QUOTES, 'UTF-8');
-            $plist .= "\n\t<key>NSCameraUsageDescription</key>\n\t<string>".$description.'</string>';
+            $metadata .= "\n        ".self::barcodeManifestMetadata();
+            $plist .= "\n".self::cameraPlistExtra();
         }
         if ($admob) {
-            $metadata .= "\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"".$config['admob']['android_app_id'].'" />';
-            $plist .= "\n\t<key>GADApplicationIdentifier</key>\n\t<string>".$config['admob']['ios_app_id'].'</string>';
+            $metadata .= "\n        ".self::admobManifestMetadata();
+            $plist .= "\n".self::admobPlistExtra();
         }
 
         return [
-            '%NATIVE_APP_NAME%' => $config['app_name'],
-            '%NATIVE_BASE_URL%' => $config['url'],
             '%NATIVE_APPLICATION_ID%' => $config['application_id'],
             '%NATIVE_BUNDLE_ID%' => $config['bundle_id'],
             '%NATIVE_IOS_TEAM%' => null !== ($config['ios_development_team'] ?? null) ? "\n\t\t\t\tDEVELOPMENT_TEAM = ".$config['ios_development_team'].';'."\n\t\t\t\t\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"Apple Development\";" : '',
@@ -187,7 +181,7 @@ class InitScaffolder
      *
      * @return array<string, string>
      */
-    private static function notificationSnippets(): array
+    public static function notificationSnippets(): array
     {
         return [
             '%NATIVE_NOTIF_IOS_IMPORT%' => "\nimport UserNotifications",
@@ -294,10 +288,27 @@ KTS,
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
-    private static function barcodeSnippets(): array
+    public static function barcodeManifestMetadata(): string
+    {
+        return '<meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />';
+    }
+
+    public static function cameraPlistExtra(): string
+    {
+        return "\t<key>NSCameraUsageDescription</key>\n\t<!--###camera_usage###-->\n\t<string>Scanner un QR code.</string>\n\t<!--###camera_usage###-->";
+    }
+
+    public static function admobManifestMetadata(): string
+    {
+        return '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" /> <!--###admob_android_app_id###-->';
+    }
+
+    public static function admobPlistExtra(): string
+    {
+        return "\t<key>GADApplicationIdentifier</key>\n\t<!--###admob_ios_app_id###-->\n\t<string>ca-app-pub-3940256099942544~1458002511</string>\n\t<!--###admob_ios_app_id###-->";
+    }
+
+    public static function barcodeSnippets(): array
     {
         return [
             '%NATIVE_BARCODE_IOS_COMPONENTS%' => ' + [BarcodeScannerComponent.self]',
@@ -313,7 +324,7 @@ KTS,
     /**
      * @return array<string, string>
      */
-    private static function admobSnippets(): array
+    public static function admobSnippets(): array
     {
         return [
             '%NATIVE_ADMOB_IOS_COMPONENTS%' => ' + [AdMobComponent.self]',
@@ -349,92 +360,6 @@ PBX,
 		};
 PBX,
         ];
-    }
-
-    private function installBridgeComponentsJs(string $projectDir, SymfonyStyle $io, bool $excludeBarcodeScanner = false): void
-    {
-        $this->requireImportmapPackages($projectDir, ['@hotwired/hotwire-native-bridge', '@joemasilotti/bridge-components'], $io);
-
-        $bootstrap = Path::join($projectDir, 'assets', 'stimulus_bootstrap.js');
-        if (!$this->filesystem->exists($bootstrap)) {
-            $io->warning('assets/stimulus_bootstrap.js introuvable — chargez les contrôleurs de @joemasilotti/bridge-components manuellement.');
-
-            return;
-        }
-        $content = (string) file_get_contents($bootstrap);
-        $load = $excludeBarcodeScanner
-            ? '$2.load(bridgeControllers.filter((controller) => controller.identifier !== "bridge--barcode-scanner"));'
-            : '$2.load(bridgeControllers);';
-        if (str_contains($content, '@joemasilotti/bridge-components')) {
-            $synced = $this->syncBarcodeScannerExclusion($content, $excludeBarcodeScanner);
-            if ($synced !== $content) {
-                file_put_contents($bootstrap, $synced);
-            }
-
-            return;
-        }
-        $patched = preg_replace(
-            '/^(\s*const (\w+) = startStimulusApp\(\);?)$/m',
-            '$1'."\n".$load,
-            'import { controllers as bridgeControllers } from "@joemasilotti/bridge-components";'."\n".$content,
-            1,
-        );
-        if (null === $patched || !str_contains($patched, '.load(bridgeControllers')) {
-            $io->warning('Impossible de patcher assets/stimulus_bootstrap.js — ajoutez app.load(controllers) de @joemasilotti/bridge-components manuellement.');
-
-            return;
-        }
-        file_put_contents($bootstrap, $patched);
-        $io->writeln('<info>Contrôleurs bridge--* chargés dans assets/stimulus_bootstrap.js</info>');
-    }
-
-    /**
-     * @param list<string> $packages
-     */
-    private function requireImportmapPackages(string $projectDir, array $packages, SymfonyStyle $io): void
-    {
-        $importmap = Path::join($projectDir, 'importmap.php');
-        if (!$this->filesystem->exists($importmap)) {
-            return;
-        }
-        $content = (string) file_get_contents($importmap);
-        $missing = array_values(array_filter(
-            $packages,
-            static fn (string $package) => !str_contains($content, "'".$package."'"),
-        ));
-        if ([] === $missing) {
-            return;
-        }
-        $process = new Process([\PHP_BINARY, 'bin/console', 'importmap:require', ...$missing], $projectDir, null, null, 300);
-        $process->run();
-        $io->writeln($process->isSuccessful()
-            ? sprintf('<info>importmap : %s ajouté(s)</info>', implode(', ', $missing))
-            : sprintf('<comment>importmap:require %s a échoué — lancez-le manuellement.</comment>', implode(' ', $missing)));
-    }
-
-    private function installStimulusController(string $projectDir, string $source, string $filename, SymfonyStyle $io): void
-    {
-        $controllers = Path::join($projectDir, 'assets', 'controllers');
-        if (!$this->filesystem->exists($controllers)) {
-            $io->warning(sprintf('assets/controllers introuvable — copiez %s manuellement.', $filename));
-
-            return;
-        }
-        $destination = Path::join($controllers, 'bridge', $filename);
-        $this->filesystem->mkdir(\dirname($destination));
-        $this->filesystem->copy($source, $destination, true);
-        $io->writeln(sprintf('<info>Contrôleur copié dans assets/controllers/bridge/%s</info>', $filename));
-    }
-
-    private function syncBarcodeScannerExclusion(string $content, bool $excludeBarcodeScanner): string
-    {
-        $filtered = '.load(bridgeControllers.filter((controller) => controller.identifier !== "bridge--barcode-scanner"))';
-        $plain = '.load(bridgeControllers)';
-        if ($excludeBarcodeScanner) {
-            return str_contains($content, $filtered) ? $content : str_replace($plain, $filtered, $content);
-        }
-
-        return str_replace($filtered, $plain, $content);
     }
 
     private function mirrorAndSubstitute(string $source, string $destination, array $tokens): void

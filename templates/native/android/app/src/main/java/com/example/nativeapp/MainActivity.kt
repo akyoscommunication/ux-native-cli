@@ -2,6 +2,8 @@ package %NATIVE_APPLICATION_ID%
 
 import android.os.Bundle%NATIVE_NOTIF_ANDROID_INTENT_IMPORT%
 import android.view.View
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -10,16 +12,25 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import dev.hotwire.core.config.Hotwire
 import dev.hotwire.core.turbo.config.PathConfigurationLoadState
 import dev.hotwire.navigation.activities.HotwireActivity
+import dev.hotwire.navigation.fragments.HotwireFragment
 import dev.hotwire.navigation.navigator.NavigatorConfiguration
 import dev.hotwire.navigation.navigator.NavigatorHost
 import dev.hotwire.navigation.util.applyDefaultImeWindowInsets
 import kotlinx.coroutines.launch
 
 class MainActivity : HotwireActivity() {
-    private val baseUrl = "%NATIVE_BASE_URL%"
+    private val baseUrl = /*###url###*/"http://127.0.0.1:8000"/*###url###*/
+    private val showTopBar = /*###top_bar###*/true/*###top_bar###*/
     private var tabs: List<NativeTab> = emptyList()%NATIVE_NOTIF_ANDROID_PENDING_URL%
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The "top_bar" path property (server JSON, per page) wins over native.top_bar.
+        supportFragmentManager.registerFragmentLifecycleCallbacks(object : FragmentManager.FragmentLifecycleCallbacks() {
+            override fun onFragmentViewCreated(fm: FragmentManager, fragment: Fragment, view: View, savedInstanceState: Bundle?) {
+                val visible = (fragment as? HotwireFragment)?.pathProperties?.get("top_bar") as? Boolean ?: showTopBar
+                view.findViewById<View>(dev.hotwire.navigation.R.id.app_bar)?.visibility = if (visible) View.VISIBLE else View.GONE
+            }
+        }, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)

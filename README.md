@@ -2,12 +2,13 @@
 
 Transformez votre site Symfony en **app iOS et Android** ([Hotwire Native](https://native.hotwired.dev/)), sans quitter `bin/console`.
 
-Le bundle génère des projets natifs prêts à compiler, puis les builde et les installe sur votre téléphone ou votre émulateur. Les pages restent votre site Symfony : les apps natives ne sont qu'une coque autour.
+Le bundle génère des projets natifs prêts à compiler, les tient à jour depuis `native.yaml`, les builde et les installe sur votre téléphone ou votre émulateur. Les pages restent votre site Symfony : les apps natives ne sont qu'une coque autour.
 
 | Commande | À quoi elle sert |
 | --- | --- |
 | `native:init` | Génère les projets `native/android` et `native/ios`. |
-| `native:build` | Compile avec Gradle et/ou Xcode, puis installe sur un appareil ou un simulateur. |
+| `native:update:config` | Réinjecte `native.yaml` (URL, nom, icône, barre du haut) et ajoute les ponts manquants. |
+| `native:build` | Met à jour la config, compile avec Gradle et/ou Xcode, puis installe sur un appareil ou un simulateur. |
 | `native:qr-install` | Sert l'APK (et l'IPA) sur le réseau local, avec un QR code à scanner. |
 | `native:dev` | Rappelle le flux de dev et peut démarrer le serveur Symfony. |
 
@@ -18,15 +19,20 @@ Le bundle génère des projets natifs prêts à compiler, puis les builde et les
 1. [Démarrage rapide](#démarrage-rapide)
 2. [Prérequis](#prérequis)
 3. [Ce qui est généré](#ce-qui-est-généré)
-4. [Onglets et navigation, pilotés par Symfony](#onglets-et-navigation-pilotés-par-symfony)
+4. [Onglets, navigation et barre du haut, pilotés par Symfony](#onglets-navigation-et-barre-du-haut-pilotés-par-symfony)
 5. [`native:init` et ses options](#nativeinit-et-ses-options)
+   - [Notifications push](#notifications-push---notification)
    - [Scan de QR code](#scan-de-qr-code---barcode-scanner)
    - [Publicités AdMob](#publicités-admob---admob)
-6. [`native:build`](#nativebuild)
-7. [`native:qr-install` et `native:dev`](#nativeqr-install-et-nativedev)
-8. [Signature iOS](#signature-ios)
-9. [Dépannage](#dépannage)
-10. [Référence de configuration](#référence-de-configuration)
+   - [Mode hors ligne](#mode-hors-ligne---offline)
+6. [`native:update:config`](#nativeupdateconfig)
+7. [`native:build`](#nativebuild)
+8. [`native:qr-install` et `native:dev`](#nativeqr-install-et-nativedev)
+9. [Côté Twig : savoir qu'on est dans l'app](#côté-twig--savoir-quon-est-dans-lapp)
+10. [Exemples d'utilisation](#exemples-dutilisation)
+11. [Signature iOS](#signature-ios)
+12. [Dépannage](#dépannage)
+13. [Référence de configuration](#référence-de-configuration)
 
 ---
 
@@ -50,7 +56,7 @@ Akyos\UxNativeCliBundle\AkyosUxNativeCliBundle::class => ['all' => true],
 ```yaml
 native:
     app_name: MonApp
-    url: 'http://192.168.1.249:8003'     # exemple : l'IP de votre Mac sur le Wi-Fi
+    url: 'http://192.168.1.249:8003'     # l'IP de votre machine sur le Wi-Fi
     application_id: com.akyos.monapp     # identifiant Android
     bundle_id: com.akyos.monapp          # identifiant iOS
     android_home: '%env(ANDROID_HOME)%'
@@ -96,6 +102,7 @@ L'app s'ouvre sur votre site. C'est tout.
 - [ ] Pour un vrai iPhone : une Team Apple (voir [Signature iOS](#signature-ios)). Le simulateur n'en a pas besoin.
 
 **Optionnel**
+- `sips` (fourni avec macOS) et l'extension PHP `gd`, pour générer les icônes depuis `native.icon`.
 - L'extension PHP `sockets` aide `native:qr-install` à détecter votre IP. Sans elle, passez `--host=…`.
 
 ---
@@ -107,32 +114,42 @@ native/
 ├── android/                       projet Gradle (Kotlin)
 │   ├── app/build.gradle.kts
 │   ├── app/google-services.json   à ajouter vous-même si --notification
+│   ├── app/src/main/res/mipmap-*/ icônes, produites depuis native.icon
 │   └── app/src/main/java/<application_id>/
-│       ├── MainActivity.kt        onglets et navigation
-│       └── NativeApplication.kt   bridge components, configuration de chemins
+│       ├── MainActivity.kt        onglets, navigation, barre du haut
+│       ├── NativeApplication.kt   bridge components, configuration de chemins
+│       └── PathConfigurationLoader.kt
 └── ios/
     ├── NativeApp.xcodeproj        projet Xcode avec schéma partagé (requis par xcodebuild)
     └── NativeApp/
-        ├── AppDelegate.swift      bridge components, configuration de chemins
-        └── SceneDelegate.swift    onglets et navigation
+        ├── AppDelegate.swift      bridge components, configuration de chemins, barre du haut
+        ├── SceneDelegate.swift    onglets et navigation
+        ├── TabConfigurationProvider.swift
+        └── Assets.xcassets/       icône, produite depuis native.icon
 ```
 
-- L'URL, les identifiants et le nom de l'app sont injectés depuis `native.yaml` à chaque `native:init`.
+- Les valeurs de `native.yaml` sont écrites dans le code entre des marqueurs, par exemple `/*###url###*/"http://192.168.1.249:8003"/*###url###*/`. `native:update:config` et `native:build` ne remplacent que la valeur : le reste du fichier, y compris vos modifications, est conservé.
 - Le package Kotlin est déplacé automatiquement pour correspondre à `application_id`.
-- Les bridge components de [@joemasilotti/bridge-components](https://github.com/joemasilotti/bridge-components) (`bridge--*`) sont préinstallés.
+- Les bridge components de [@joemasilotti/bridge-components](https://github.com/joemasilotti/bridge-components) (`bridge--*`) sont préinstallés côté natif.
+- En debug, le cache du WebView est désactivé sur les deux plateformes : vos changements HTML et JavaScript apparaissent au prochain lancement.
 
 > **Attention à `--force`.** Il **supprime** `native/android` et `native/ios` avant de les régénérer, y compris vos modifications manuelles et `google-services.json`. Sauvegardez ce fichier avant, puis remettez-le.
 
 ---
 
-## Onglets et navigation, pilotés par Symfony
+## Onglets, navigation et barre du haut, pilotés par Symfony
 
-Les onglets et les règles de navigation ne sont pas codés dans l'app : l'app les lit sur votre serveur à chaque lancement, dans `/config/ios_v1.json` et `/config/android_v1.json`. On les modifie **sans rebuild** : il suffit de relancer l'app.
+Les onglets, les règles de navigation et la barre du haut ne sont pas codés dans l'app : l'app lit votre serveur à chaque lancement, dans `/config/ios_v1.json` et `/config/android_v1.json`. On les modifie **sans rebuild** : il suffit de relancer l'app.
 
-Ces fichiers sont produits par [Symfony UX Native](https://ux.symfony.com/native) :
+Ces fichiers sont produits par [Symfony UX Native](https://ux.symfony.com/native). En dev ils sont servis à la volée ; en prod, lancez `ux-native:dump` au déploiement.
 
 ```php
 // src/Native/AppNativeConfiguration.php
+use Symfony\UX\Native\Attribute\AsNativeConfiguration;
+use Symfony\UX\Native\Attribute\AsNativeConfigurationProvider;
+use Symfony\UX\Native\Configuration\Configuration;
+use Symfony\UX\Native\Configuration\Rule;
+
 #[AsNativeConfigurationProvider]
 final class AppNativeConfiguration
 {
@@ -143,17 +160,38 @@ final class AppNativeConfiguration
             settings: [
                 'tabs' => [
                     ['label' => 'Accueil', 'path' => '/', 'icon' => 'house'],
-                    ['label' => 'Push', 'path' => '/demo/page-3', 'icon' => 'bell'],
+                    ['label' => 'Compte', 'path' => '/compte', 'icon' => 'person'],
                 ],
             ],
-            rules: [new Rule(patterns: ['.*'], properties: ['context' => 'default', 'pull_to_refresh_enabled' => true])],
+            rules: [
+                new Rule(patterns: ['/checkout.*'], properties: ['top_bar' => false]),
+                new Rule(patterns: ['.*'], properties: ['context' => 'default', 'pull_to_refresh_enabled' => true]),
+            ],
+        );
+    }
+
+    #[AsNativeConfiguration('/config/android_v1.json')]
+    public function android(): Configuration
+    {
+        return new Configuration(
+            settings: [
+                'tabs' => [
+                    ['label' => 'Accueil', 'path' => '/', 'icon' => 'ic_home'],
+                    ['label' => 'Compte', 'path' => '/compte', 'icon' => 'ic_person'],
+                ],
+            ],
+            rules: [
+                new Rule(patterns: ['/checkout.*'], properties: ['top_bar' => false]),
+                new Rule(patterns: ['.*'], properties: ['context' => 'default', 'pull_to_refresh_enabled' => true, 'uri' => 'hotwire://fragment/web']),
+            ],
         );
     }
 }
 ```
 
-- `icon` est un nom de [SF Symbol](https://developer.apple.com/sf-symbols/) sur iOS et un nom de drawable sur Android.
-- Sans `tabs`, l'app affiche une seule pile de navigation, sans barre d'onglets.
+- **Onglets** : `icon` est un nom de [SF Symbol](https://developer.apple.com/sf-symbols/) sur iOS et un nom de drawable sur Android. Sans `tabs`, l'app affiche une seule pile de navigation, sans barre d'onglets.
+- **Barre du haut** : la propriété `top_bar` d'une règle l'affiche (`true`) ou la masque (`false`) sur les pages qui correspondent au motif, sur iOS comme sur Android. Sans propriété, c'est `native.top_bar` qui s'applique. La première règle qui correspond gagne : mettez les règles précises avant `.*`.
+- **Les autres propriétés** sont celles de Hotwire Native : `context` (`default` ou `modal`), `pull_to_refresh_enabled`, `presentation`, `title`, et `uri` sur Android.
 
 > **Les onglets ne changent pas ?** Supprimez `public/config/*.json`. Ces fichiers statiques, créés par `ux-native:dump`, masquent la route dynamique en dev. Vérifiez aussi que l'URL `http://<votre-ip>/config/ios_v1.json` renvoie bien vos onglets.
 
@@ -168,11 +206,15 @@ php bin/console native:init [--force] [--offline] [--notification] [--barcode-sc
 | Option | Effet |
 | --- | --- |
 | `--force` | Supprime et régénère `native/android` et `native/ios` (voir l'avertissement plus haut). Sans cette option, les dossiers doivent être vides. |
-| `--notification` | Ajoute les notifications push (ci-dessous). Sans cette option, l'app ne contient **aucun** code de notification. |
-| `--barcode-scanner` | Ajoute le scan de QR code par le shell natif (ci-dessous). |
-| `--admob` | Ajoute les publicités Google AdMob affichées par le shell natif (ci-dessous). |
-| `--offline` | Mode hors ligne : installe `spomky-labs/pwa-bundle`, crée `config/packages/pwa.yaml` et une page `/offline`, ajoute `{{ pwa() }}` au layout, et autorise les service workers sur iOS. Pensez ensuite à `cache:clear`. |
+| `--notification` | Ajoute les notifications push. Sans cette option, l'app ne contient **aucun** code de notification. |
+| `--barcode-scanner` | Ajoute le scan de QR code par le shell natif. |
+| `--admob` | Ajoute les publicités Google AdMob affichées par le shell natif. |
+| `--offline` | Mode hors ligne : service worker, page `/offline`, service workers autorisés sur iOS. |
 | `--app-name`, `--url`, `--application-id`, `--bundle-id` | Remplacent la valeur de `native.yaml`, pour cette exécution uniquement. |
+
+Chaque pont peut aussi être ajouté plus tard, sans régénérer, avec `native:update:config --notification|--barcode-scanner|--admob`.
+
+**Côté web, pour tous les ponts :** les contrôleurs Stimulus `bridge--notification-token`, `bridge--barcode-scanner` et `bridge--admob` sont fournis par le bundle via Asset Mapper (`@akyos/ux-native-cli`), rien n'est copié dans `assets/`. Le bundle ajoute `@hotwired/hotwire-native-bridge` à l'importmap s'il manque. Avec `--notification`, il ajoute aussi `@joemasilotti/bridge-components` et patche `assets/stimulus_bootstrap.js` pour charger ses contrôleurs `bridge--*`, en retirant ceux que le bundle remplace. Dans un navigateur classique, ces contrôleurs ne font rien : vos autres `data-action` continuent de fonctionner.
 
 ### Notifications push (`--notification`)
 
@@ -186,19 +228,39 @@ php bin/console native:init [--force] [--offline] [--notification] [--barcode-sc
 | Toucher → page `url` | `AppDelegate` + `SceneDelegate` | `MainActivity` (`singleTask`, `onNewIntent`) |
 | Dépendances | — | Firebase Messaging, plugin `google-services` |
 
-Côté web, le bundle installe `@hotwired/hotwire-native-bridge` et `@joemasilotti/bridge-components` dans l'importmap s'ils manquent, et charge les contrôleurs `bridge--*`.
+**Dans un Live Component** (`symfony/ux-live-component`) : le trait, le `data-controller`, rien d'autre. Le bouton demande le token. `$this->notificationToken` est rempli et `onNotificationToken()` est appelée : surchargez-la pour enregistrer l'appareil. En cas de refus ou d'erreur, `$this->notificationError` contient le message.
 
-**Récupérer le token dans une page :**
+```php
+use Akyos\UxNativeCliBundle\Live\NotificationTrait;
+use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
+use Symfony\UX\LiveComponent\DefaultActionTrait;
+
+#[AsLiveComponent]
+class Devices
+{
+    use DefaultActionTrait;
+    use NotificationTrait;
+
+    public function __construct(private DeviceRepository $devices) {}
+
+    protected function onNotificationToken(string $token): void
+    {
+        $this->devices->register($this->getUser(), $token);
+    }
+}
+```
 
 ```twig
-<div data-controller="bridge--notification-token"
-     data-action="bridge--notification-token:retrieved->mon-controleur#enregistrer">
-    <button data-action="bridge--notification-token#get">Activer les notifications</button>
-    <p data-bridge--notification-token-target="token"></p>
+<div {{ attributes }}>
+    <div data-controller="bridge--notification-token">
+        <button type="button" data-action="bridge--notification-token#get">Activer les notifications</button>
+        <p data-bridge--notification-token-target="token"></p>
+    </div>
+    {% if this.notificationError %}<p class="error">{{ this.notificationError }}</p>{% endif %}
 </div>
 ```
 
-L'événement `bridge--notification-token:retrieved` contient `event.detail.token` : un token APNs (hexadécimal) sur iOS, un token FCM sur Android.
+Le `data-controller` du pont est sur un enfant, pour laisser `data-controller="live"` sur la racine. Sans Live Component, écoutez l'événement `bridge--notification-token:retrieved` : `event.detail.token` est un token APNs (hexadécimal) sur iOS, un token FCM sur Android.
 
 **Envoyer les notifications :** [`akyos/native-push`](https://github.com/akyoscommunication/native-push) enregistre ce token côté serveur et envoie les notifications (`PushMessage`, APNs et FCM, ouverture de la page au toucher).
 
@@ -210,7 +272,7 @@ L'événement `bridge--notification-token:retrieved` contient `event.detail.toke
 
 ### Scan de QR code (`--barcode-scanner`)
 
-Le shell ouvre la caméra et renvoie le contenu du QR. Dans un navigateur, le contrôleur ne se charge pas : gardez un repli (saisie du code).
+Le shell ouvre la caméra et renvoie le contenu du QR. Dans un navigateur, le contrôleur ne fait rien : gardez un repli (saisie du code).
 
 | | iOS | Android |
 | --- | --- | --- |
@@ -218,41 +280,75 @@ Le shell ouvre la caméra et renvoie le contenu du QR. Dans un navigateur, le co
 | Autorisation | `NSCameraUsageDescription` (`native.camera_usage_description`) | Aucune permission `CAMERA` : l'écran est dessiné par les services Google Play |
 | Réponse | `{"code": "…"}`, ou sans code si le scan est fermé ou refusé | Idem. Sans services Google Play (certains Huawei), aucun code n'est renvoyé |
 
+**Dans un Live Component** : `ScanQRTrait` reçoit le code dans `$this->scannedCode` et appelle `onQrScanned()`. La valeur `auto` ouvre le scan à l'apparition, et ne le rouvre pas une fois le code reçu.
+
+```php
+use Akyos\UxNativeCliBundle\Live\ScanQRTrait;
+use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
+use Symfony\UX\LiveComponent\DefaultActionTrait;
+
+#[AsLiveComponent]
+class Join
+{
+    use DefaultActionTrait;
+    use ScanQRTrait;
+
+    public ?string $message = null;
+
+    protected function onQrScanned(string $code): void
+    {
+        $this->message = sprintf('Billet %s validé', $code);
+    }
+}
+```
+
 ```twig
-<div data-controller="bridge--barcode-scanner"
-     data-bridge--barcode-scanner-auto-value="true"
-     data-action="bridge--barcode-scanner:scanned->mon-controleur#utiliserLeCode">
-    <button type="button" data-action="bridge--barcode-scanner#scan">Scanner</button>
+<div {{ attributes }}>
+    <div data-controller="bridge--barcode-scanner" data-bridge--barcode-scanner-auto-value="true">
+        <button type="button" data-action="bridge--barcode-scanner#scan">Scanner à nouveau</button>
+    </div>
+    {% if this.message %}<p>{{ this.message }}</p>{% endif %}
 </div>
 ```
 
-`bridge--barcode-scanner:scanned` contient `event.detail.code`. `:cancelled` est émis si le scan est fermé. `auto` ouvre le scan dès l'apparition de l'élément.
-
-Le contrôleur est copié dans `assets/controllers/bridge/`. Avec `--notification`, le contrôleur homonyme de `@joemasilotti/bridge-components` (contrat `barcode`, pas `code`) est retiré du chargement.
+Sans Live Component, écoutez `bridge--barcode-scanner:scanned` (`event.detail.code`) et `bridge--barcode-scanner:cancelled`.
 
 Le simulateur iOS n'a pas de caméra : le scan réel se vérifie sur un iPhone.
 
 ### Publicités AdMob (`--admob`)
 
-Un seul composant pour les formats rewarded, interstitiel, bannière et native. L'identifiant d'**app** est écrit dans le manifeste (il change avec `native:init --force`). L'identifiant de **bloc d'annonces** est envoyé par la page à chaque demande.
+Un seul composant pour les formats rewarded, interstitiel, bannière et native. L'identifiant d'**app** (`native.admob.*`) est écrit dans le manifeste par `native:update:config`. L'identifiant de **bloc d'annonces** est envoyé par la page à chaque demande.
 
-| Événement | Donnée | Réponse |
+| Action | Donnée envoyée | Événement en retour |
 | --- | --- | --- |
-| `rewarded` | `{adUnitId}` | `{status: "earned", reward}` si la pub est vue jusqu'au bout, sinon `{status: "dismissed"}` |
-| `interstitial` | `{adUnitId}` | `{status: "dismissed"}` à la fermeture |
-| `banner` | `{adUnitId, position}` | `{status: "loaded", height}` |
-| `native` | `{adUnitId, position}` | `{status: "loaded", height}` |
+| `rewarded` | `{adUnitId}` | `bridge--admob:earned` (`detail.reward`) si la pub est vue jusqu'au bout, sinon `bridge--admob:dismissed` |
+| `interstitial` | `{adUnitId}` | `bridge--admob:dismissed` à la fermeture |
+| `banner` | `{adUnitId, position}` | `bridge--admob:loaded` (`detail.height`) |
+| `native` | `{adUnitId, position}` | `bridge--admob:loaded` (`detail.height`) |
 | `hide` | — | retire la bannière ou la pub native |
 
-Tout format peut répondre `{status: "failed", error}`. `position` vaut `"top"` ou `"bottom"`.
+Tout format peut émettre `bridge--admob:failed` (`detail.error`) : la cible `error` est alors affichée. `position` vaut `"top"` ou `"bottom"`. Une pub plein écran interrompt les autres actions du même événement : mettez la suite sur `bridge--admob:earned` ou `:dismissed`.
 
 ```twig
 <div data-controller="bridge--admob"
-     data-bridge--admob-android-unit-value="ca-app-pub-…/…"
-     data-bridge--admob-ios-unit-value="ca-app-pub-…/…">
-    <button data-action="bridge--admob#rewarded bridge--admob:earned->mon-controleur#recompenser">Regarder une pub</button>
+     data-bridge--admob-android-unit-value="ca-app-pub-3940256099942544/5224354917"
+     data-bridge--admob-ios-unit-value="ca-app-pub-3940256099942544/1712485313">
+    <button data-action="bridge--admob#rewarded bridge--admob:earned->bonus#credit">Regarder une pub</button>
     <p hidden data-bridge--admob-target="error">Pas de pub disponible.</p>
 </div>
+```
+
+Pour une bannière ancrée en bas de page, qui laisse la place au contenu grâce à la variable CSS `--admob-anchored-height` :
+
+```twig
+<div data-controller="bridge--admob"
+     data-bridge--admob-android-unit-value="ca-app-pub-3940256099942544/9214589741"
+     data-bridge--admob-ios-unit-value="ca-app-pub-3940256099942544/2435281174"
+     data-action="turbo:load@document->bridge--admob#banner"></div>
+```
+
+```css
+body { padding-bottom: var(--admob-anchored-height, 0px); }
 ```
 
 Par défaut, `native.admob.android_app_id` et `native.admob.ios_app_id` sont les identifiants d'app **de test** de Google. Les blocs de test, à mettre dans la page :
@@ -267,6 +363,49 @@ Par défaut, `native.admob.android_app_id` et `native.admob.ios_app_id` sont les
 
 Sans identifiant d'app dans le manifeste, l'application s'arrête au lancement. En développement, restez sur les identifiants de test.
 
+### Mode hors ligne (`--offline`)
+
+`native:init --offline` :
+- installe `spomky-labs/pwa-bundle` et l'enregistre dans `config/bundles.php` ;
+- crée `config/packages/pwa.yaml`, `src/Controller/NativeOfflineController.php` (route `/offline`) et `templates/native/offline.html.twig` ;
+- ajoute `{{ pwa() }}` avant `</head>` de vos `base.html.twig` ;
+- autorise les service workers sur iOS (`WKAppBoundDomains` dans `Info.plist`, `limitsNavigationsToAppBoundDomains` dans `AppDelegate.swift`) ;
+- embarque la configuration de chemins dans les apps et lance `pwa:compile`.
+
+Après toute modification de `pwa.yaml`, relancez `php bin/console pwa:compile`. Les service workers exigent HTTPS, sauf sur `localhost` : utilisez `symfony serve` avec son certificat, ou ngrok, pour un vrai téléphone.
+
+---
+
+## `native:update:config`
+
+```bash
+php bin/console native:update:config [--notification] [--barcode-scanner] [--admob]
+```
+
+Relit `native.yaml` et met à jour le projet déjà généré. `native:init` la lance à la fin, `native:build` au début : en pratique, vous n'avez à l'appeler vous-même que pour ajouter un pont ou vérifier la configuration sans compiler.
+
+| Ce qui change | Où |
+| --- | --- |
+| `url` | URL de démarrage Android et iOS, et URL du JSON de navigation |
+| `app_name` | Nom sous l'icône |
+| `top_bar` | Barre du haut par défaut. La propriété `top_bar` d'une règle de navigation l'emporte, page par page |
+| `icon`, `icon_background` | Icône adaptative Android (`mipmap-anydpi-v26/ic_launcher.xml`, logo `ic_launcher_logo` sur un fond uni) et icône iOS 1024 px |
+| `camera_usage_description` | `NSCameraUsageDescription`, si le scanner est dans le projet |
+| `admob.android_app_id`, `admob.ios_app_id` | Manifeste Android et `Info.plist`, si AdMob est dans le projet |
+
+L'icône est générée avec `sips` (macOS) et GD, depuis un PNG, un JPG ou un ICO. Elle est centrée dans un carré si elle ne l'est pas déjà. Sur Android, l'icône adaptative est indispensable : la librairie bridge-components embarque sa propre icône adaptative (un pont), qui masquerait un simple `ic_launcher.png`.
+
+```yaml
+native:
+    url: 'http://192.168.1.12:8000'
+    app_name: MonApp
+    top_bar: false
+    icon: assets/app-icon.png
+    icon_background: '#1E293B'
+```
+
+Les options `--notification`, `--barcode-scanner` et `--admob` ajoutent le pont s'il manque. Elles ne retirent rien, et un second lancement ne duplique pas le code. `application_id` et `bundle_id` ne sont pas modifiés ici : ils sont posés par `native:init`.
+
 ---
 
 ## `native:build`
@@ -280,6 +419,8 @@ php bin/console native:build -p ios -n --ios-destination=device:00008130-000C58C
 php bin/console native:build --no-install                       # compile sans installer
 ```
 
+Avant de compiler, la commande applique `native:update:config` (icône, URL, nom, barre du haut). Sur Android, l'application est désinstallée puis réinstallée, sinon le lanceur garde l'ancienne icône.
+
 | Option | Défaut | Effet |
 | --- | --- | --- |
 | `-p`, `--platform` | `android` | `android`, `ios` ou `all`. |
@@ -287,7 +428,7 @@ php bin/console native:build --no-install                       # compile sans i
 | `--ios-target` | — | `device` (iPhones branchés seulement) ou `simulator` (simulateurs démarrés seulement). |
 | `--ios-destination` | — | `device:UDID` ou `simulator:UDID` : fixe la cible sans poser de question. |
 
-**Comment la cible iOS est choisie :** seuls les iPhones réellement branchés et les simulateurs réellement **démarrés** sont proposés. S'il y en a plusieurs, la commande vous demande lequel utiliser. En mode `-n`, précisez `--ios-destination`.
+**Comment la cible iOS est choisie :** seuls les iPhones réellement branchés et les simulateurs réellement **démarrés** sont proposés. S'il y en a plusieurs, la commande vous demande lequel utiliser. En mode `-n`, précisez `--ios-destination`. Les UDID s'obtiennent avec `xcrun devicectl list devices` et `xcrun simctl list devices booted`.
 
 **Où sont les fichiers produits :**
 - **Android :** `native/android/app/build/outputs/apk/debug/app-debug.apk`, ou `…/release/app-release.apk` si `android_gradle_task` contient `Release`.
@@ -326,6 +467,114 @@ php bin/console native:dev --server   # démarre aussi symfony server:start
 
 ---
 
+## Côté Twig : savoir qu'on est dans l'app
+
+`symfony/ux-native` fournit `ux_is_native()`. Le bundle complète sa détection : une requête est aussi reconnue comme native quand elle vient d'un WebView Android (en-tête `X-Requested-With` au nom du package) ou qu'elle porte le cookie `hotwire_native=1`. Ce cookie permet de tester vos gabarits « app » depuis un navigateur de bureau.
+
+```twig
+{% if not ux_is_native() %}
+    <header class="site-nav">…</header>   {# la barre native remplace ce menu dans l'app #}
+{% endif %}
+
+{% if ux_is_native() %}
+    <a href="{{ path('scan') }}">Scanner un billet</a>
+{% endif %}
+```
+
+---
+
+## Exemples d'utilisation
+
+**Changer l'URL ou le nom de l'app.** Modifiez `native.yaml`, puis compilez : la config est réinjectée avant le build.
+
+```bash
+php bin/console native:build -p android
+```
+
+**Ajouter les notifications à un projet déjà généré.** Rien à régénérer, vos modifications manuelles sont conservées.
+
+```bash
+php bin/console native:update:config --notification
+cp ~/Downloads/google-services.json native/android/app/
+php bin/console native:build -p all
+```
+
+**Masquer la barre du haut sur une page**, sans recompiler : une règle dans `AppNativeConfiguration`, puis relancez l'app.
+
+```php
+new Rule(patterns: ['/checkout.*', '/kiosque.*'], properties: ['top_bar' => false]),
+```
+
+**Masquer la barre partout par défaut**, puis la réafficher sur quelques pages :
+
+```yaml
+# config/packages/native.yaml
+native:
+    top_bar: false
+```
+
+```php
+new Rule(patterns: ['/compte.*'], properties: ['top_bar' => true]),
+```
+
+**Ouvrir une page en modal** (formulaire, détail) :
+
+```php
+new Rule(patterns: ['/billets/nouveau'], properties: ['context' => 'modal', 'top_bar' => true]),
+```
+
+**Mettre votre logo en icône.** Un carré de 1024 px ou plus, PNG, JPG ou ICO, et une couleur de fond pour Android.
+
+```yaml
+native:
+    icon: assets/icons/logo.png
+    icon_background: '#0F172A'
+```
+
+```bash
+php bin/console native:build -p android   # réinstalle l'app : le lanceur rafraîchit l'icône
+```
+
+**Faire tester l'app Android à un collègue.** Son téléphone sur le même Wi-Fi scanne le QR et télécharge l'APK.
+
+```bash
+php bin/console native:qr-install -p android --build
+```
+
+**Build Android de release** : changez la tâche Gradle, l'APK installé suit.
+
+```yaml
+native:
+    android_gradle_task: assembleRelease
+```
+
+**Build iOS en CI**, sans question interactive :
+
+```bash
+xcrun simctl list devices booted      # relève l'UDID du simulateur démarré
+php bin/console native:build -p ios -n --no-install --ios-destination=simulator:1A2B3C4D-…
+```
+
+**Lire le token push en JavaScript**, sans Live Component :
+
+```js
+document.addEventListener('bridge--notification-token:retrieved', (event) => {
+    fetch('/api/devices', { method: 'POST', body: JSON.stringify({ token: event.detail.token }) });
+});
+```
+
+**Tester les gabarits « app » dans un navigateur de bureau** : posez le cookie `hotwire_native=1` dans les outils de développement, `ux_is_native()` renvoie alors `true`.
+
+**Tout régénérer** après une mise à jour du bundle, en gardant Firebase :
+
+```bash
+cp native/android/app/google-services.json /tmp/
+php bin/console native:init --force --notification --barcode-scanner
+cp /tmp/google-services.json native/android/app/
+```
+
+---
+
 ## Signature iOS
 
 Pour installer sur un **vrai iPhone**, Xcode doit signer l'app avec une Team Apple. Renseignez-la une fois pour toutes : elle est réinjectée à chaque `native:init`, même avec `--force`.
@@ -352,8 +601,10 @@ La Team doit aussi apparaître dans Xcode → *Settings → Accounts*, **sans cr
 
 | Symptôme | Cause | Solution |
 | --- | --- | --- |
-| L'app affiche une page blanche ou une erreur réseau | `native.url` pointe sur `127.0.0.1`, ou le serveur n'écoute pas sur le réseau. | Mettez l'IP locale, lancez `symfony serve --allow-all-ip`, puis `native:init --force`. |
-| Les onglets ne se mettent pas à jour | Un `public/config/*.json` statique masque la route dynamique. | Supprimez `public/config/*.json` et relancez l'app. |
+| L'app affiche une page blanche ou une erreur réseau | `native.url` pointe sur `127.0.0.1`, ou le serveur n'écoute pas sur le réseau. | Mettez l'IP locale, lancez `symfony serve --allow-all-ip`, puis `native:build`. |
+| Les onglets ou la barre du haut ne se mettent pas à jour | Un `public/config/*.json` statique masque la route dynamique, ou l'app n'a pas été relancée. | Supprimez `public/config/*.json`, fermez l'app complètement et relancez-la. |
+| Aucune barre en haut de l'app | `top_bar: false` dans `native.yaml`, ou une règle `top_bar => false` qui correspond à la page. | Vérifiez les deux, puis `native:build` pour la config, un simple relancement pour les règles. |
+| L'icône est un pont, pas mon logo | L'app a été compilée avant `native.icon`, ou le lanceur garde l'ancienne icône. | `native:build -p android` : l'app est désinstallée puis réinstallée. |
 | `Unable to find a destination matching…` | L'iPhone n'est pas branché, déverrouillé ou approuvé, ou n'est pas signé. | Déverrouillez-le, acceptez « Faire confiance à cet ordinateur », et renseignez `ios_development_team`. |
 | « iOS … is not installed » | Xcode n'a pas la plateforme iOS de l'iPhone. | Xcode → *Settings → Components*, installez la version demandée. |
 | `No Account for Team "…"` | Le compte de cette Team n'est pas chargé dans Xcode. | Xcode → *Settings → Accounts* : ajoutez ou reconnectez le compte, et vérifiez qu'il n'y a pas de croix rouge. |
@@ -362,6 +613,7 @@ La Team doit aussi apparaître dans Xcode → *Settings → Accounts*, **sans cr
 | `Missing package product` | Les dépendances Swift ne sont pas résolues. | Xcode → *File → Packages → Reset Package Caches*. |
 | « No matching client found for package name » | `google-services.json` a été créé pour un autre `application_id`. | Téléchargez le fichier de l'app Firebase qui a le bon package. |
 | Plus de `google-services.json` après `--force` | `--force` supprime tout le dossier `native/android`. | Remettez votre copie dans `native/android/app/`. |
+| `sips est introuvable` | L'icône n'est générée que sur macOS. | Lancez `native:update:config` sur un Mac, ou déposez les icônes à la main. |
 
 ---
 
@@ -376,9 +628,12 @@ La Team doit aussi apparaître dans Xcode → *Settings → Accounts*, **sans cr
 | `application_id` | `com.example.nativeapp` | Identifiant Android. Le package Kotlin est déplacé en conséquence. |
 | `bundle_id` | `com.example.nativeapp` | Identifiant iOS. |
 | `ios_development_team` | `null` | Team ID Apple (10 caractères). Requis pour un iPhone et pour le push. |
-| `camera_usage_description` | `Scanner un QR code.` | Texte de `NSCameraUsageDescription`, écrit avec `--barcode-scanner`. |
-| `admob.android_app_id` | identifiant de test Google | Identifiant d'app AdMob Android (`ca-app-pub-…~…`), écrit avec `--admob`. |
-| `admob.ios_app_id` | identifiant de test Google | Identifiant d'app AdMob iOS (`ca-app-pub-…~…`), écrit avec `--admob`. |
+| `top_bar` | `true` | Barre du haut native par défaut. La propriété `top_bar` d'une règle de navigation l'emporte, par page. |
+| `icon` | `null` | Chemin d'une image carrée (PNG, JPG ou ICO), relatif au projet. `native:update:config` en fait les icônes Android et iOS. |
+| `icon_background` | `#FFFFFF` | Fond de l'icône adaptative Android, derrière `icon`. |
+| `camera_usage_description` | `Scanner un QR code.` | Texte de `NSCameraUsageDescription`, mis à jour si le scanner est présent. |
+| `admob.android_app_id` | identifiant de test Google | Identifiant d'app AdMob Android (`ca-app-pub-…~…`). |
+| `admob.ios_app_id` | identifiant de test Google | Identifiant d'app AdMob iOS (`ca-app-pub-…~…`). |
 | `android_home` | `null` | SDK Android. Sinon `ANDROID_HOME`, puis les emplacements usuels. |
 | `java_home` | `null` | JDK utilisé par Gradle. Sinon `JAVA_HOME`. |
 | `android_path` | `null` | Dossier du projet Android. Par défaut `native/android`. |

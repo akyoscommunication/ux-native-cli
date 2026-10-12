@@ -15,6 +15,7 @@ class NativeBuildRunner
         private NativeAndroidApkLocator $apkLocator,
         private NativeIosAppLocator $iosLocator,
         private NativeIosDeviceInstaller $iosDeviceInstaller,
+        private NativeProjectUpdater $projectUpdater,
     ) {
     }
 
@@ -23,6 +24,12 @@ class NativeBuildRunner
         $projectDir = $this->kernel->getProjectDir();
         $androidRoot = $this->config['android_path'] ?? Path::join($projectDir, 'native', 'android');
         $iosRoot = $this->config['ios_path'] ?? Path::join($projectDir, 'native', 'ios');
+        if (is_dir($androidRoot) && is_dir($iosRoot)) {
+            $synced = $this->projectUpdater->apply($this->config, $projectDir, $androidRoot, $iosRoot, $io);
+            if (0 !== $synced) {
+                return $synced;
+            }
+        }
         $task = $this->config['android_gradle_task'] ?? 'assembleDebug';
         $scheme = $this->config['ios_scheme'] ?? 'NativeApp';
         $iosProject = $this->config['ios_project'] ?? 'NativeApp.xcodeproj';
@@ -133,6 +140,18 @@ class NativeBuildRunner
             $io->error('adb introuvable. Définissez ANDROID_HOME (ou native.android_home) ou installez le SDK Android (platform-tools).');
 
             return 1;
+        }
+        $applicationId = $this->config['application_id'] ?? null;
+        if (\is_string($applicationId) && '' !== $applicationId) {
+            $uninstall = new Process([$adb, 'uninstall', $applicationId]);
+            $io->writeln($uninstall->getCommandLine());
+            $uninstall->run(function (string $type, string $buffer) use ($io): void {
+                $io->write($buffer);
+            });
+            if (!$uninstall->isSuccessful()) {
+                $clear = new Process([$adb, 'shell', 'pm', 'clear', $applicationId]);
+                $clear->run();
+            }
         }
         $process = new Process([$adb, 'install', '-r', $apkPath], null, null, null, null);
         $io->writeln($process->getCommandLine());

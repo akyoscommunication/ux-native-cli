@@ -69,6 +69,7 @@ final class NotificationTokenComponent: BridgeComponent {
     }
 
     private func showError(_ message: String) {
+        reply(to: "get", with: ErrorData(error: message))
         let alert = UIAlertController(title: "Notifications indisponibles", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         (delegate?.destination as? UIViewController)?.present(alert, animated: true)
@@ -78,5 +79,9 @@ final class NotificationTokenComponent: BridgeComponent {
 private extension NotificationTokenComponent {
     struct TokenData: Encodable {
         let token: String
+    }
+
+    struct ErrorData: Encodable {
+        let error: String
     }
 }

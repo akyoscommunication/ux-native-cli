@@ -37,13 +37,17 @@ class NotificationTokenComponent(
         }
 
         if (FirebaseApp.getApps(activity).isEmpty()) {
-            Log.e(TAG, "Firebase is not configured: add google-services.json to the app/ directory and rebuild.")
+            val error = "Firebase n'est pas configuré : ajoutez google-services.json dans android/app puis reconstruisez."
+            Log.e(TAG, error)
+            replyTo("get", JSONObject().put("error", error).toString())
             return
         }
 
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token -> replyTo("get", JSONObject().put("token", token).toString()) }
-            .addOnFailureListener { error -> Log.e(TAG, "Unable to fetch FCM token", error) }
+            .addOnFailureListener { error ->
+                replyTo("get", JSONObject().put("error", error.message ?: "Jeton FCM indisponible").toString())
+            }
     }
 
     private companion object {

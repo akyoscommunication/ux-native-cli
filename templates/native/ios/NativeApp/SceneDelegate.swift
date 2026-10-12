@@ -4,7 +4,7 @@ import UIKit
 class SceneDelegate: UIResponder, UIWindowSceneDelegate, PathConfigurationDelegate {
     var window: UIWindow?
 
-    private let rootURL = URL(string: "%NATIVE_BASE_URL%")!
+    private let rootURL = URL(string: /*###url###*/"http://127.0.0.1:8000"/*###url###*/)!
     private let tabBarController = HotwireTabBarController()
     private lazy var navigator = Navigator(configuration: .init(
         name: "main",

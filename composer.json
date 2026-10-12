@@ -4,6 +4,7 @@
     "type": "symfony-bundle",
     "version": "0.4.0",
     "license": "MIT",
+    "keywords": ["symfony-ux"],
     "require": {
         "php": ">=8.2",
         "endroid/qr-code": "*",
@@ -18,6 +19,7 @@
     },
     "suggest": {
         "symfony/ux-native": "Server-side native detection and JSON path configuration for Hotwire Native",
+        "symfony/ux-live-component": "Pour NotificationTrait et ScanQRTrait dans un Live Component",
         "spomky-labs/pwa-bundle": "Workbox et service worker pour native:init --offline"
     },
     "autoload": {

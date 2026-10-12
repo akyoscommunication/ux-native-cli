@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "%NATIVE_APP_NAME%"
+rootProject.name = /*###app_name###*/"NativeApp"/*###app_name###*/
 include(":app")
