@@ -9,8 +9,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        #if DEBUG
+        // A debug install keeps the previous HTML and JavaScript otherwise.
+        // Caches only: cookies (the session), local storage and service workers stay.
         URLCache.shared.removeAllCachedResponses()
-        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: Date(timeIntervalSince1970: 0)) {}
+        WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache], modifiedSince: Date(timeIntervalSince1970: 0)) {}
+        #endif
         Hotwire.config.defaultViewController = { url in NativeWebViewController(url: url) }
         Hotwire.registerBridgeComponents(Bridgework.coreComponents%NATIVE_NOTIF_IOS_COMPONENTS%%NATIVE_BARCODE_IOS_COMPONENTS%%NATIVE_ADMOB_IOS_COMPONENTS%)%NATIVE_NOTIF_IOS_SETUP%
 

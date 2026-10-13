@@ -9,6 +9,34 @@ use Symfony\Component\Process\Process;
 
 class NativeProjectUpdater
 {
+    private const ANDROID_DEBUG_CACHE = <<<'KOTLIN'
+                // A debug install keeps the previous HTML and JavaScript otherwise. Release builds keep the HTTP cache.
+                if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                    Hotwire.config.makeCustomWebView = { context ->
+                        HotwireWebView(context).apply {
+                            settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                            clearCache(true)
+                        }
+                    }
+                }
+
+        KOTLIN;
+
+    /** The unconditional block written by 0.5, with or without its comment. */
+    private const ANDROID_LEGACY_CACHE_PATTERN = '/^(?:        \/\/ A debug install keeps the previous HTML and JavaScript otherwise\.\n)?        Hotwire\.config\.makeCustomWebView = \{ context ->\n            HotwireWebView\(context\)\.apply \{\n                settings\.cacheMode = WebSettings\.LOAD_NO_CACHE\n                clearCache\(true\)\n            \}\n        \}\n/m';
+
+    private const IOS_DEBUG_CACHE = <<<'SWIFT'
+                #if DEBUG
+                // A debug install keeps the previous HTML and JavaScript otherwise.
+                // Caches only: cookies (the session), local storage and service workers stay.
+                URLCache.shared.removeAllCachedResponses()
+                WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache], modifiedSince: Date(timeIntervalSince1970: 0)) {}
+                #endif
+
+        SWIFT;
+
+    private const IOS_LEGACY_CACHE = "        URLCache.shared.removeAllCachedResponses()\n        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: Date(timeIntervalSince1970: 0)) {}\n";
+
     public function __construct(
         private Filesystem $filesystem,
         private string $bundleRoot,
@@ -404,54 +432,61 @@ class NativeProjectUpdater
         ) ?? $content;
     }
 
+    /**
+     * The WebView cache is disabled in debug builds only. Projects generated with 0.5 did it in every build,
+     * and on iOS wiped every website data type (cookies included): those blocks are migrated in place.
+     */
     private function disableWebViewCache(string $androidRoot, string $iosRoot, string $package): void
     {
         $application = $this->kotlinFile($androidRoot, $package, 'NativeApplication.kt');
         $this->patch($application, function (string $content): string {
-            if (str_contains($content, 'LOAD_NO_CACHE')) {
+            if (str_contains($content, 'FLAG_DEBUGGABLE')) {
                 return $content;
             }
-            if (!str_contains($content, 'import android.webkit.WebSettings')) {
+            if (str_contains($content, 'LOAD_NO_CACHE')) {
+                $migrated = preg_replace(self::ANDROID_LEGACY_CACHE_PATTERN, self::ANDROID_DEBUG_CACHE, $content, 1);
+                if (null === $migrated || $migrated === $content) {
+                    return $content;
+                }
+                $content = $migrated;
+            } else {
                 $content = str_replace(
-                    "import android.app.Application\n",
-                    "import android.app.Application\nimport android.webkit.WebSettings\n",
+                    "        Hotwire.config.jsonConverter = KotlinXJsonConverter()\n",
+                    "        Hotwire.config.jsonConverter = KotlinXJsonConverter()\n".self::ANDROID_DEBUG_CACHE,
                     $content
                 );
+                $content = preg_replace(
+                    '/(remoteFileUrl = \/\*###url###\*\/.*?\/\*###url###\*\/ \+ "\/config\/android_v1\.json",\s*\),)\s*\)/s',
+                    "$1\n            options = PathConfiguration.LoaderOptions(httpHeaders = mapOf(\"Cache-Control\" to \"no-cache\")),\n        )",
+                    $content,
+                    1
+                ) ?? $content;
             }
-            if (!str_contains($content, 'import dev.hotwire.core.turbo.webview.HotwireWebView')) {
-                $content = str_replace(
-                    "import dev.hotwire.core.turbo.config.PathConfiguration\n",
-                    "import dev.hotwire.core.turbo.config.PathConfiguration\nimport dev.hotwire.core.turbo.webview.HotwireWebView\n",
-                    $content
-                );
+            foreach ([
+                'import android.content.pm.ApplicationInfo' => 'import android.app.Application',
+                'import android.webkit.WebSettings' => 'import android.content.pm.ApplicationInfo',
+                'import dev.hotwire.core.turbo.webview.HotwireWebView' => 'import dev.hotwire.core.turbo.config.PathConfiguration',
+            ] as $import => $after) {
+                if (!str_contains($content, $import)) {
+                    $content = str_replace($after."\n", $after."\n".$import."\n", $content);
+                }
             }
-            $content = str_replace(
-                "        Hotwire.config.jsonConverter = KotlinXJsonConverter()\n",
-                "        Hotwire.config.jsonConverter = KotlinXJsonConverter()\n        Hotwire.config.makeCustomWebView = { context ->\n            HotwireWebView(context).apply {\n                settings.cacheMode = WebSettings.LOAD_NO_CACHE\n                clearCache(true)\n            }\n        }\n",
-                $content
-            );
 
-            return preg_replace(
-                '/(remoteFileUrl = \/\*###url###\*\/.*?\/\*###url###\*\/ \+ "\/config\/android_v1\.json",\s*\),)\s*\)/s',
-                "$1\n            options = PathConfiguration.LoaderOptions(httpHeaders = mapOf(\"Cache-Control\" to \"no-cache\")),\n        )",
-                $content,
-                1
-            ) ?? $content;
+            return $content;
         });
 
         $this->patch(Path::join($iosRoot, 'NativeApp', 'AppDelegate.swift'), function (string $content): string {
-            if (str_contains($content, 'WKWebsiteDataStore')) {
+            if (str_contains($content, 'WKWebsiteDataTypeDiskCache')) {
                 return $content;
+            }
+            if (str_contains($content, 'WKWebsiteDataStore')) {
+                return str_replace(self::IOS_LEGACY_CACHE, self::IOS_DEBUG_CACHE, $content);
             }
             if (!str_contains($content, 'import WebKit')) {
                 $content = str_replace("import UIKit\n", "import UIKit\nimport WebKit\n", $content);
             }
 
-            return str_replace(
-                ") -> Bool {\n",
-                ") -> Bool {\n        URLCache.shared.removeAllCachedResponses()\n        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: Date(timeIntervalSince1970: 0)) {}\n",
-                $content
-            );
+            return str_replace(") -> Bool {\n", ") -> Bool {\n".self::IOS_DEBUG_CACHE, $content);
         });
     }
 
