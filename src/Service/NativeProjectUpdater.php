@@ -46,7 +46,7 @@ class NativeProjectUpdater
     /**
      * @param array<string, mixed> $config
      */
-    public function apply(array $config, string $projectDir, string $androidRoot, string $iosRoot, SymfonyStyle $io, bool $notification = false, bool $barcodeScanner = false, bool $admob = false): int
+    public function apply(array $config, string $projectDir, string $androidRoot, string $iosRoot, SymfonyStyle $io, bool $notification = false, bool $barcodeScanner = false, bool $admob = false, bool $calendar = false, bool $game = false): int
     {
         if (!is_dir($androidRoot) || !is_dir($iosRoot)) {
             $io->error('Projet natif introuvable. Lancez native:init d\'abord.');
@@ -70,12 +70,19 @@ class NativeProjectUpdater
         if ($admob) {
             $this->ensureAdmob($androidRoot, $iosRoot, $package, $io);
         }
+        if ($calendar) {
+            $this->ensureCalendar($androidRoot, $iosRoot, $package, $io);
+        }
+        if ($game) {
+            $this->ensureGame($androidRoot, $iosRoot, $package, $io);
+        }
 
         $counts = $this->replaceMarkers($androidRoot, $iosRoot, [
             'url' => (string) $config['url'],
             'app_name' => (string) $config['app_name'],
             'top_bar' => ($config['top_bar'] ?? true) ? 'true' : 'false',
             'camera_usage' => (string) ($config['camera_usage_description'] ?? 'Scanner un QR code.'),
+            'calendar_usage' => (string) ($config['calendar_usage_description'] ?? 'Ajouter un événement à votre agenda.'),
             'admob_android_app_id' => (string) ($config['admob']['android_app_id'] ?? 'ca-app-pub-3940256099942544~3347511713'),
             'admob_ios_app_id' => (string) ($config['admob']['ios_app_id'] ?? 'ca-app-pub-3940256099942544~1458002511'),
         ]);
@@ -87,7 +94,7 @@ class NativeProjectUpdater
 
         $this->disableWebViewCache($androidRoot, $iosRoot, $package);
         $this->installIcon($config, $projectDir, $androidRoot, $iosRoot, $io);
-        $this->installWeb($projectDir, $io, $notification, $barcodeScanner, $admob);
+        $this->installWeb($projectDir, $io, $notification, $barcodeScanner, $admob, $calendar, $game);
 
         return 0;
     }
@@ -114,7 +121,9 @@ class NativeProjectUpdater
         });
         $this->patch(Path::join($androidRoot, 'app', 'src', 'main', 'AndroidManifest.xml'), function (string $content) use ($snippets): string {
             $content = $this->insertAfter($content, '<uses-permission android:name="android.permission.INTERNET" />', $snippets['%NATIVE_NOTIF_ANDROID_PERMISSION%'], 'POST_NOTIFICATIONS');
-            $content = $this->insertAfter($content, 'android:configChanges="orientation|screenSize"', $snippets['%NATIVE_NOTIF_ANDROID_LAUNCH_MODE%'], 'android:launchMode');
+            if (1 === preg_match('/android:configChanges="[^"]*"/', $content, $configChanges)) {
+                $content = $this->insertAfter($content, $configChanges[0], $snippets['%NATIVE_NOTIF_ANDROID_LAUNCH_MODE%'], 'android:launchMode');
+            }
             if (!str_contains($content, 'NativeMessagingService')) {
                 $content = str_replace('</application>', $snippets['%NATIVE_NOTIF_ANDROID_SERVICE%']."\n    </application>", $content);
             }
@@ -266,6 +275,88 @@ class NativeProjectUpdater
 
             return $content;
         }, $io);
+    }
+
+    private function ensureCalendar(string $androidRoot, string $iosRoot, string $package, SymfonyStyle $io): void
+    {
+        $snippets = InitScaffolder::calendarSnippets();
+        $this->copyKotlin('templates/calendar/android/app/src/main/java/com/example/nativeapp/CalendarComponent.kt', 'CalendarComponent.kt', $androidRoot, $package);
+        $this->copyFile('templates/calendar/ios/NativeApp/CalendarComponent.swift', Path::join($iosRoot, 'NativeApp', 'CalendarComponent.swift'));
+        $this->patch($this->kotlinFile($androidRoot, $package, 'NativeApplication.kt'), function (string $content) use ($snippets): string {
+            return $this->registerAndroidComponent($content, $snippets['%NATIVE_CALENDAR_ANDROID_COMPONENTS%'], '::CalendarComponent');
+        });
+        $this->patch(Path::join($iosRoot, 'NativeApp', 'AppDelegate.swift'), function (string $content) use ($snippets): string {
+            return $this->registerIosComponent($content, $snippets['%NATIVE_CALENDAR_IOS_COMPONENTS%'], 'CalendarComponent.self');
+        });
+        $this->patch(Path::join($iosRoot, 'NativeApp', 'Info.plist'), function (string $content): string {
+            if (str_contains($content, 'NSCalendarsUsageDescription')) {
+                return $content;
+            }
+
+            return $this->insertBeforeLast($content, "</dict>\n</plist>", "\n".InitScaffolder::calendarPlistExtra()."\n");
+        });
+        $this->patchPbx($iosRoot, function (string $content) use ($snippets): string {
+            return $this->addSwiftFileToPbx($content, 'CalendarComponent.swift', $snippets, '%NATIVE_CALENDAR_PBX_');
+        }, $io);
+    }
+
+    private function ensureGame(string $androidRoot, string $iosRoot, string $package, SymfonyStyle $io): void
+    {
+        $snippets = InitScaffolder::gameSnippets();
+        $this->copyKotlin('templates/game/android/app/src/main/java/com/example/nativeapp/GameComponent.kt', 'GameComponent.kt', $androidRoot, $package);
+        $this->copyFile('templates/game/ios/NativeApp/GameComponent.swift', Path::join($iosRoot, 'NativeApp', 'GameComponent.swift'));
+        $this->patch(Path::join($androidRoot, 'app', 'build.gradle.kts'), function (string $content) use ($snippets): string {
+            return $this->insertAfter($content, 'implementation("com.github.joemasilotti:bridge-components:0.13.2")', $snippets['%NATIVE_GAME_GRADLE_DEPS%'], 'swiperefreshlayout');
+        });
+        $this->patch(Path::join($androidRoot, 'app', 'src', 'main', 'AndroidManifest.xml'), function (string $content): string {
+            if (str_contains($content, 'screenLayout')) {
+                return $content;
+            }
+
+            return preg_replace('/(android:configChanges="[^"]*)"/', '$1'.InitScaffolder::gameAndroidConfigChanges().'"', $content, 1) ?? $content;
+        });
+        $this->patch($this->kotlinFile($androidRoot, $package, 'NativeApplication.kt'), function (string $content) use ($snippets): string {
+            return $this->registerAndroidComponent($content, $snippets['%NATIVE_GAME_ANDROID_COMPONENTS%'], '::GameComponent');
+        });
+        $this->patch(Path::join($iosRoot, 'NativeApp', 'AppDelegate.swift'), function (string $content) use ($snippets, $io): string {
+            $content = $this->registerIosComponent($content, $snippets['%NATIVE_GAME_IOS_COMPONENTS%'], 'GameComponent.self');
+            $content = $this->insertAfter(
+                $content,
+                'UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)'."\n    }",
+                $snippets['%NATIVE_GAME_IOS_ORIENTATION%'],
+                'supportedInterfaceOrientationsFor'
+            );
+            if (!str_contains($content, 'GameScreen')) {
+                $content = $this->insertAfter($content, 'final class NativeWebViewController: HotwireWebViewController', $snippets['%NATIVE_GAME_IOS_CONFORMANCE%'], ', GameScreen');
+                $content = $this->insertAfter($content, 'HotwireWebViewController, GameScreen {', $snippets['%NATIVE_GAME_IOS_WEBVIEW_MEMBERS%'], 'var isGame');
+            }
+            if (!str_contains($content, 'GameScreen')) {
+                $io->warning('NativeWebViewController introuvable dans AppDelegate.swift : faites adopter GameScreen (propriété isGame) par votre contrôleur web, voir le README.');
+            }
+
+            return $content;
+        });
+        $this->patch(Path::join($iosRoot, 'NativeApp', 'Info.plist'), function (string $content): string {
+            return $this->insertAfter($content, '<string>UIInterfaceOrientationPortrait</string>', InitScaffolder::gamePlistOrientations(), 'UIInterfaceOrientationLandscapeLeft');
+        });
+        $this->patchPbx($iosRoot, function (string $content) use ($snippets): string {
+            return $this->addSwiftFileToPbx($content, 'GameComponent.swift', $snippets, '%NATIVE_GAME_PBX_');
+        }, $io);
+    }
+
+    /**
+     * @param array<string, string> $snippets
+     */
+    private function addSwiftFileToPbx(string $content, string $file, array $snippets, string $prefix): string
+    {
+        if (str_contains($content, $file)) {
+            return $content;
+        }
+        $content = $this->insertAfter($content, 'B20100000000000000000007 /* TabConfigurationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000016 /* TabConfigurationProvider.swift */; };', $snippets[$prefix.'BUILDFILE%'], $file.' in Sources');
+        $content = $this->insertAfter($content, 'B20100000000000000000016 /* TabConfigurationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabConfigurationProvider.swift; sourceTree = "<group>"; };', $snippets[$prefix.'FILEREF%'], 'path = '.$file);
+        $content = $this->insertAfter($content, 'B20100000000000000000016 /* TabConfigurationProvider.swift */,', $snippets[$prefix.'GROUP%'], $file.' */,');
+
+        return $this->insertAfter($content, 'B20100000000000000000007 /* TabConfigurationProvider.swift in Sources */,', $snippets[$prefix.'SOURCES%'], $file.' in Sources */,');
     }
 
     private function registerAndroidComponent(string $content, string $snippet, string $sentinel): string
@@ -745,7 +836,7 @@ XML, strtoupper((string) ($config['icon_background'] ?? '#FFFFFF'))));
         return $process->isSuccessful();
     }
 
-    private function installWeb(string $projectDir, SymfonyStyle $io, bool $notification, bool $barcodeScanner, bool $admob): void
+    private function installWeb(string $projectDir, SymfonyStyle $io, bool $notification, bool $barcodeScanner, bool $admob, bool $calendar, bool $game): void
     {
         if ($notification) {
             $excluded = ['bridge--notification-token'];
@@ -754,7 +845,7 @@ XML, strtoupper((string) ($config['icon_background'] ?? '#FFFFFF'))));
             }
             $this->installBridgeComponentsJs($projectDir, $io, $excluded);
         }
-        if ($barcodeScanner || $admob) {
+        if ($barcodeScanner || $admob || $calendar || $game) {
             $this->requireImportmapPackages($projectDir, ['@hotwired/hotwire-native-bridge'], $io);
         }
     }

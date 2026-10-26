@@ -24,6 +24,8 @@ Le bundle génère des projets natifs prêts à compiler, les tient à jour depu
    - [Notifications push](#notifications-push---notification)
    - [Scan de QR code](#scan-de-qr-code---barcode-scanner)
    - [Publicités AdMob](#publicités-admob---admob)
+   - [Agenda](#agenda---calendar)
+   - [Page de jeu en paysage](#page-de-jeu-en-paysage---game)
    - [Mode hors ligne](#mode-hors-ligne---offline)
 6. [`native:update:config`](#nativeupdateconfig)
 7. [`native:build`](#nativebuild)
@@ -200,7 +202,7 @@ final class AppNativeConfiguration
 ## `native:init` et ses options
 
 ```bash
-php bin/console native:init [--force] [--offline] [--notification] [--barcode-scanner] [--admob]
+php bin/console native:init [--force] [--offline] [--notification] [--barcode-scanner] [--admob] [--calendar] [--game]
 ```
 
 | Option | Effet |
@@ -209,12 +211,14 @@ php bin/console native:init [--force] [--offline] [--notification] [--barcode-sc
 | `--notification` | Ajoute les notifications push. Sans cette option, l'app ne contient **aucun** code de notification. |
 | `--barcode-scanner` | Ajoute le scan de QR code par le shell natif. |
 | `--admob` | Ajoute les publicités Google AdMob affichées par le shell natif. |
+| `--calendar` | Ajoute l'ouverture de l'agenda du téléphone sur un événement pré-rempli. |
+| `--game` | Ajoute le passage en paysage et plein écran sur une page de jeu. |
 | `--offline` | Mode hors ligne : service worker, page `/offline`, service workers autorisés sur iOS. |
 | `--app-name`, `--url`, `--application-id`, `--bundle-id` | Remplacent la valeur de `native.yaml`, pour cette exécution uniquement. |
 
-Chaque pont peut aussi être ajouté plus tard, sans régénérer, avec `native:update:config --notification|--barcode-scanner|--admob`.
+Chaque pont peut aussi être ajouté plus tard, sans régénérer, avec `native:update:config --notification|--barcode-scanner|--admob|--calendar|--game`.
 
-**Côté web, pour tous les ponts :** les contrôleurs Stimulus `bridge--notification-token`, `bridge--barcode-scanner` et `bridge--admob` sont fournis par le bundle via Asset Mapper (`@akyos/ux-native-cli`), rien n'est copié dans `assets/`. Le bundle ajoute `@hotwired/hotwire-native-bridge` à l'importmap s'il manque. Avec `--notification`, il ajoute aussi `@joemasilotti/bridge-components` et patche `assets/stimulus_bootstrap.js` pour charger ses contrôleurs `bridge--*`, en retirant ceux que le bundle remplace. Dans un navigateur classique, ces contrôleurs ne font rien : vos autres `data-action` continuent de fonctionner.
+**Côté web, pour tous les ponts :** les contrôleurs Stimulus `bridge--notification-token`, `bridge--barcode-scanner`, `bridge--admob`, `bridge--calendar` et `bridge--game` sont fournis par le bundle via Asset Mapper (`@akyos/ux-native-cli`), rien n'est copié dans `assets/`. Le bundle ajoute `@hotwired/hotwire-native-bridge` à l'importmap s'il manque. Avec `--notification`, il ajoute aussi `@joemasilotti/bridge-components` et patche `assets/stimulus_bootstrap.js` pour charger ses contrôleurs `bridge--*`, en retirant ceux que le bundle remplace. Dans un navigateur classique, ces contrôleurs ne font rien : vos autres `data-action` continuent de fonctionner.
 
 ### Notifications push (`--notification`)
 
@@ -363,6 +367,46 @@ Par défaut, `native.admob.android_app_id` et `native.admob.ios_app_id` sont les
 
 Sans identifiant d'app dans le manifeste, l'application s'arrête au lancement. En développement, restez sur les identifiants de test.
 
+### Agenda (`--calendar`)
+
+Le shell ouvre l'agenda du téléphone sur un nouvel événement pré-rempli (titre, dates, lieu). Les dates sont des timestamps Unix **en millisecondes**. Sans date de fin, l'événement dure deux heures.
+
+| | iOS | Android |
+| --- | --- | --- |
+| Écran | `CalendarComponent.swift` : feuille d'ajout d'EventKit (`EKEventEditViewController`) | Application d'agenda du téléphone (`Intent.ACTION_INSERT`) |
+| Autorisation | `NSCalendarsUsageDescription` et `NSCalendarsFullAccessUsageDescription` (`native.calendar_usage_description`). Si l'accès est refusé, une alerte l'explique | Aucune permission : c'est l'application d'agenda qui écrit |
+
+```twig
+<div data-controller="bridge--calendar"
+     data-bridge--calendar-title-value="{{ match.title }}"
+     data-bridge--calendar-starts-value="{{ match.startsAt.timestamp * 1000 }}"
+     data-bridge--calendar-ends-value="{{ match.endsAt.timestamp * 1000 }}"
+     data-bridge--calendar-location-value="{{ match.venue }}">
+    <button type="button" data-action="bridge--calendar#add">Ajouter à mon agenda</button>
+</div>
+```
+
+Dans un navigateur, le contrôleur ne fait rien : le clic est annulé et aucun événement n'est créé. Gardez un repli côté web (un lien `.ics`), affiché hors de l'app (voir [Côté Twig](#côté-twig--savoir-quon-est-dans-lapp)). Dans l'app, un lien vers un `.ics` serait une visite Hotwire : la réponse n'est pas une page et l'app afficherait une erreur.
+
+### Page de jeu en paysage (`--game`)
+
+Sur une page qui porte `data-controller="bridge--game"`, l'app passe en paysage et se met en plein écran, puis remet tout en place quand on quitte la page (ou que l'écran disparaît, par exemple en changeant d'onglet).
+
+| | iOS | Android |
+| --- | --- | --- |
+| Pendant le jeu | Paysage, barre d'onglets et barre d'état masquées, barre d'accueil estompée, pas de pull-to-refresh, un premier glissement depuis un bord montre la barre au lieu de quitter la page | Paysage, barres système masquées (un glissement depuis le bord les montre un instant), navigation du bas masquée, pas de swipe-to-refresh |
+| Ce que le bridge ajoute au projet | `GameComponent.swift`, `Info.plist` (paysage autorisé), `AppDelegate` (`supportedInterfaceOrientationsFor`, portrait hors jeu) et `isGame` sur `NativeWebViewController` | `GameComponent.kt`, `configChanges` de `MainActivity` (`screenLayout`, `smallestScreenSize`) et `androidx.swiperefreshlayout` |
+
+```twig
+<div data-controller="bridge--game">
+    {# la page du jeu #}
+</div>
+```
+
+Sans l'app (ou avec une version qui ne connaît pas le pont), rien ne se passe.
+
+**Contrôleur web personnalisé (iOS).** Le bridge pilote la barre d'état, la barre d'accueil et les gestes de bord par un contrôleur qui adopte `GameScreen`. `NativeWebViewController` le fait déjà. Si vous remplacez `Hotwire.config.defaultViewController` par votre propre classe, faites-la adopter `GameScreen` (propriété `var isGame: Bool`) et relayez-la à `prefersStatusBarHidden`, `prefersHomeIndicatorAutoHidden` et `preferredScreenEdgesDeferringSystemGestures`, comme le fait `NativeWebViewController`. `native:update:config --game` avertit quand il ne trouve pas `NativeWebViewController`.
+
 ### Mode hors ligne (`--offline`)
 
 `native:init --offline` :
@@ -379,7 +423,7 @@ Après toute modification de `pwa.yaml`, relancez `php bin/console pwa:compile`.
 ## `native:update:config`
 
 ```bash
-php bin/console native:update:config [--notification] [--barcode-scanner] [--admob]
+php bin/console native:update:config [--notification] [--barcode-scanner] [--admob] [--calendar] [--game]
 ```
 
 Relit `native.yaml` et met à jour le projet déjà généré. `native:init` la lance à la fin, `native:build` au début : en pratique, vous n'avez à l'appeler vous-même que pour ajouter un pont ou vérifier la configuration sans compiler.
@@ -391,6 +435,7 @@ Relit `native.yaml` et met à jour le projet déjà généré. `native:init` la 
 | `top_bar` | Barre du haut par défaut. La propriété `top_bar` d'une règle de navigation l'emporte, page par page |
 | `icon`, `icon_background` | Icône adaptative Android (`mipmap-anydpi-v26/ic_launcher.xml`, logo `ic_launcher_logo` sur un fond uni) et icône iOS 1024 px |
 | `camera_usage_description` | `NSCameraUsageDescription`, si le scanner est dans le projet |
+| `calendar_usage_description` | `NSCalendarsUsageDescription` et `NSCalendarsFullAccessUsageDescription`, si le pont calendar est dans le projet |
 | `admob.android_app_id`, `admob.ios_app_id` | Manifeste Android et `Info.plist`, si AdMob est dans le projet |
 
 L'icône est générée avec `sips` (macOS) et GD, depuis un PNG, un JPG ou un ICO. Elle est centrée dans un carré si elle ne l'est pas déjà. Sur Android, l'icône adaptative est indispensable : la librairie bridge-components embarque sa propre icône adaptative (un pont), qui masquerait un simple `ic_launcher.png`.
@@ -404,7 +449,7 @@ native:
     icon_background: '#1E293B'
 ```
 
-Les options `--notification`, `--barcode-scanner` et `--admob` ajoutent le pont s'il manque. Elles ne retirent rien, et un second lancement ne duplique pas le code. `application_id` et `bundle_id` ne sont pas modifiés ici : ils sont posés par `native:init`.
+Les options `--notification`, `--barcode-scanner`, `--admob`, `--calendar` et `--game` ajoutent le pont s'il manque. Elles ne retirent rien, et un second lancement ne duplique pas le code. `application_id` et `bundle_id` ne sont pas modifiés ici : ils sont posés par `native:init`.
 
 ---
 
@@ -632,6 +677,7 @@ La Team doit aussi apparaître dans Xcode → *Settings → Accounts*, **sans cr
 | `icon` | `null` | Chemin d'une image carrée (PNG, JPG ou ICO), relatif au projet. `native:update:config` en fait les icônes Android et iOS. |
 | `icon_background` | `#FFFFFF` | Fond de l'icône adaptative Android, derrière `icon`. |
 | `camera_usage_description` | `Scanner un QR code.` | Texte de `NSCameraUsageDescription`, mis à jour si le scanner est présent. |
+| `calendar_usage_description` | `Ajouter un événement à votre agenda.` | Texte de `NSCalendarsUsageDescription` et `NSCalendarsFullAccessUsageDescription`, mis à jour si le pont calendar est présent. |
 | `admob.android_app_id` | identifiant de test Google | Identifiant d'app AdMob Android (`ca-app-pub-…~…`). |
 | `admob.ios_app_id` | identifiant de test Google | Identifiant d'app AdMob iOS (`ca-app-pub-…~…`). |
 | `android_home` | `null` | SDK Android. Sinon `ANDROID_HOME`, puis les emplacements usuels. |

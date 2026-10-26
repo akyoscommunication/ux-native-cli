@@ -23,7 +23,7 @@ class NativeApplication : Application() {
                 }
             }
         }
-        Hotwire.registerBridgeComponents(*Bridgework.coreComponents%NATIVE_NOTIF_ANDROID_COMPONENTS%%NATIVE_BARCODE_ANDROID_COMPONENTS%%NATIVE_ADMOB_ANDROID_COMPONENTS%)
+        Hotwire.registerBridgeComponents(*Bridgework.coreComponents%NATIVE_NOTIF_ANDROID_COMPONENTS%%NATIVE_BARCODE_ANDROID_COMPONENTS%%NATIVE_ADMOB_ANDROID_COMPONENTS%%NATIVE_CALENDAR_ANDROID_COMPONENTS%%NATIVE_GAME_ANDROID_COMPONENTS%)
         Hotwire.loadPathConfiguration(
             context = this,
             location = PathConfiguration.Location(

@@ -28,7 +28,9 @@ class NativeUpdateConfigCommand extends Command
         $this
             ->addOption('notification', null, InputOption::VALUE_NONE, 'Ajoute le bridge notification-token s\'il manque')
             ->addOption('barcode-scanner', null, InputOption::VALUE_NONE, 'Ajoute le bridge barcode-scanner s\'il manque')
-            ->addOption('admob', null, InputOption::VALUE_NONE, 'Ajoute le bridge admob s\'il manque');
+            ->addOption('admob', null, InputOption::VALUE_NONE, 'Ajoute le bridge admob s\'il manque')
+            ->addOption('calendar', null, InputOption::VALUE_NONE, 'Ajoute le bridge calendar s\'il manque')
+            ->addOption('game', null, InputOption::VALUE_NONE, 'Ajoute le bridge game s\'il manque');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -47,6 +49,8 @@ class NativeUpdateConfigCommand extends Command
             (bool) $input->getOption('notification'),
             (bool) $input->getOption('barcode-scanner'),
             (bool) $input->getOption('admob'),
+            (bool) $input->getOption('calendar'),
+            (bool) $input->getOption('game'),
         );
         if (0 === $status) {
             $io->success('Configuration native mise à jour.');

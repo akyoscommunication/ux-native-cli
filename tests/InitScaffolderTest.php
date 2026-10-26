@@ -158,6 +158,135 @@ PHP);
         }
     }
 
+    #[TestWith([true, false])]
+    #[TestWith([false, true])]
+    #[TestWith([true, true])]
+    public function testCalendarAndGameFlags(bool $calendar, bool $game): void
+    {
+        $filesystem = new Filesystem();
+        $projectDir = sys_get_temp_dir().'/native-cli-test-'.bin2hex(random_bytes(4));
+        $filesystem->mkdir($projectDir);
+        $scaffolder = $this->scaffolder($filesystem, $projectDir, ['calendar_usage_description' => 'Ajoutez ce match à votre agenda.']);
+
+        try {
+            self::assertSame(0, $scaffolder->scaffold([], false, false, new SymfonyStyle(new ArrayInput([]), new NullOutput()), false, false, false, $calendar, $game));
+
+            $all = $this->readProject($projectDir);
+            $java = $projectDir.'/native/android/app/src/main/java/com/acme/demo/';
+            $manifest = (string) file_get_contents($projectDir.'/native/android/app/src/main/AndroidManifest.xml');
+            $plist = (string) file_get_contents($projectDir.'/native/ios/NativeApp/Info.plist');
+            $delegate = (string) file_get_contents($projectDir.'/native/ios/NativeApp/AppDelegate.swift');
+
+            self::assertStringNotContainsString('%NATIVE_', $all);
+            self::assertSame(1, substr_count($all, 'import dev.hotwire.core.bridge.BridgeComponentFactory'));
+
+            self::assertSame($calendar, is_file($java.'CalendarComponent.kt'));
+            self::assertSame($calendar, is_file($projectDir.'/native/ios/NativeApp/CalendarComponent.swift'));
+            self::assertSame($calendar, str_contains($all, 'BridgeComponentFactory("calendar", ::CalendarComponent)'));
+            self::assertSame($calendar, str_contains($delegate, 'CalendarComponent.self'));
+            self::assertSame($calendar, str_contains($plist, 'NSCalendarsFullAccessUsageDescription'));
+            self::assertSame($calendar, str_contains($plist, '<string>Ajoutez ce match à votre agenda.</string>'));
+            self::assertSame($calendar ? 2 : 0, substr_count($plist, '<!--###calendar_usage###-->') / 2);
+            self::assertSame($calendar, str_contains($all, 'CalendarComponent.swift in Sources'));
+            self::assertSame($calendar, str_contains(
+                (string) file_get_contents($projectDir.'/native/ios/NativeApp.xcodeproj/project.pbxproj'),
+                'path = CalendarComponent.swift'
+            ));
+
+            self::assertSame($game, is_file($java.'GameComponent.kt'));
+            self::assertSame($game, is_file($projectDir.'/native/ios/NativeApp/GameComponent.swift'));
+            self::assertSame($game, str_contains($all, 'BridgeComponentFactory("game", ::GameComponent)'));
+            self::assertSame($game, str_contains($delegate, 'GameComponent.self'));
+            self::assertSame($game, str_contains($delegate, 'GameMode.orientations'));
+            self::assertSame($game, str_contains($delegate, 'HotwireWebViewController, GameScreen {'));
+            self::assertSame($game, str_contains($delegate, 'var isGame = false'));
+            self::assertSame($game, str_contains($plist, 'UIInterfaceOrientationLandscapeLeft'));
+            self::assertSame($game, str_contains($manifest, 'android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"'));
+            self::assertSame(!$game, str_contains($manifest, 'android:configChanges="orientation|screenSize"'));
+            self::assertSame($game, str_contains($all, 'swiperefreshlayout:1.1.0'));
+            self::assertSame($game, str_contains($all, 'GameComponent.swift in Sources'));
+        } finally {
+            $filesystem->remove($projectDir);
+        }
+    }
+
+    public function testUpdateAddsCalendarAndGameOnceToAnExistingProject(): void
+    {
+        $filesystem = new Filesystem();
+        $projectDir = sys_get_temp_dir().'/native-cli-test-'.bin2hex(random_bytes(4));
+        $filesystem->mkdir($projectDir);
+        $scaffolder = $this->scaffolder($filesystem, $projectDir, []);
+        $updater = new NativeProjectUpdater($filesystem, \dirname(__DIR__));
+        $io = new SymfonyStyle(new ArrayInput([]), new NullOutput());
+        $android = $projectDir.'/native/android';
+        $ios = $projectDir.'/native/ios';
+        $config = ['app_name' => 'Demo', 'url' => 'http://127.0.0.1:8000', 'top_bar' => true];
+
+        try {
+            self::assertSame(0, $scaffolder->scaffold([], false, false, $io));
+            $before = $this->readProject($projectDir);
+            self::assertStringNotContainsString('CalendarComponent', $before);
+            self::assertStringNotContainsString('GameComponent', $before);
+            self::assertStringNotContainsString('GameScreen', $before);
+
+            // Game first, then the notification bridge: its launchMode must still land on the changed configChanges.
+            foreach ([[false, false, true, true], [true, false, true, true]] as [$notification, $barcode, $calendar, $game]) {
+                self::assertSame(0, $updater->apply($config, $projectDir, $android, $ios, $io, $notification, $barcode, false, $calendar, $game));
+            }
+
+            $all = $this->readProject($projectDir);
+            self::assertSame(1, substr_count($all, 'BridgeComponentFactory("calendar", ::CalendarComponent)'));
+            self::assertSame(1, substr_count($all, 'BridgeComponentFactory("game", ::GameComponent)'));
+            self::assertSame(1, substr_count($all, 'CalendarComponent.swift in Sources */,'));
+            self::assertSame(1, substr_count($all, 'GameComponent.swift in Sources */,'));
+            self::assertSame(1, substr_count($all, 'swiperefreshlayout:1.1.0'));
+            self::assertSame(1, substr_count($all, 'func application(_ application: UIApplication, supportedInterfaceOrientationsFor'));
+            self::assertSame(1, substr_count($all, ', GameScreen'));
+            self::assertSame(1, substr_count($all, 'var isGame = false'));
+            self::assertSame(1, substr_count($all, 'UIInterfaceOrientationLandscapeLeft'));
+            self::assertSame(1, substr_count($all, '<key>NSCalendarsUsageDescription</key>'));
+
+            $manifest = (string) file_get_contents($android.'/app/src/main/AndroidManifest.xml');
+            self::assertSame(1, substr_count($manifest, 'screenLayout|smallestScreenSize'));
+            self::assertSame(1, substr_count($manifest, 'android:launchMode="singleTask"'));
+        } finally {
+            $filesystem->remove($projectDir);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $extra
+     */
+    private function scaffolder(Filesystem $filesystem, string $projectDir, array $extra): InitScaffolder
+    {
+        $kernel = $this->createStub(KernelInterface::class);
+        $kernel->method('getProjectDir')->willReturn($projectDir);
+        $bundleRoot = \dirname(__DIR__);
+
+        return new InitScaffolder($filesystem, $kernel, [
+            'app_name' => 'Demo',
+            'url' => 'http://127.0.0.1:8000',
+            'application_id' => 'com.acme.demo',
+            'bundle_id' => 'com.acme.demo',
+            'android_path' => null,
+            'ios_path' => null,
+            'ios_project' => 'skip-xcodebuild.xcodeproj',
+            'ios_development_team' => null,
+        ] + $extra, $bundleRoot, new OfflineScaffolder($filesystem, $kernel, $bundleRoot), new NativeProjectUpdater($filesystem, $bundleRoot));
+    }
+
+    private function readProject(string $projectDir): string
+    {
+        $all = '';
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($projectDir.'/native', \FilesystemIterator::SKIP_DOTS)) as $file) {
+            if (!str_ends_with($file->getFilename(), '.jar')) {
+                $all .= file_get_contents($file->getPathname());
+            }
+        }
+
+        return $all;
+    }
+
     public function testIconBecomesAdaptiveLauncherIcon(): void
     {
         if (null === (new ExecutableFinder())->find('sips')) {

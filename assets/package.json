@@ -22,6 +22,18 @@
                 "name": "bridge--admob",
                 "fetch": "eager",
                 "enabled": true
+            },
+            "calendar": {
+                "main": "controllers/calendar_controller.js",
+                "name": "bridge--calendar",
+                "fetch": "eager",
+                "enabled": true
+            },
+            "game": {
+                "main": "controllers/game_controller.js",
+                "name": "bridge--game",
+                "fetch": "eager",
+                "enabled": true
             }
         },
         "importmap": {

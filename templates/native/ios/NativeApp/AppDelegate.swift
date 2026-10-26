@@ -16,7 +16,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache], modifiedSince: Date(timeIntervalSince1970: 0)) {}
         #endif
         Hotwire.config.defaultViewController = { url in NativeWebViewController(url: url) }
-        Hotwire.registerBridgeComponents(Bridgework.coreComponents%NATIVE_NOTIF_IOS_COMPONENTS%%NATIVE_BARCODE_IOS_COMPONENTS%%NATIVE_ADMOB_IOS_COMPONENTS%)%NATIVE_NOTIF_IOS_SETUP%
+        Hotwire.registerBridgeComponents(Bridgework.coreComponents%NATIVE_NOTIF_IOS_COMPONENTS%%NATIVE_BARCODE_IOS_COMPONENTS%%NATIVE_ADMOB_IOS_COMPONENTS%%NATIVE_CALENDAR_IOS_COMPONENTS%%NATIVE_GAME_IOS_COMPONENTS%)%NATIVE_NOTIF_IOS_SETUP%
 
         let localPathConfigURL = Bundle.main.url(forResource: "path-configuration", withExtension: "json")!
         let remotePathConfigURL = URL(string: /*###url###*/"http://127.0.0.1:8000"/*###url###*/ + "/config/ios_v1.json")!
@@ -37,11 +37,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
         UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-    }
+    }%NATIVE_GAME_IOS_ORIENTATION%
 }%NATIVE_NOTIF_IOS_DELEGATE%
 
 /// The "top_bar" path property (server JSON, per page) wins over native.top_bar.
-final class NativeWebViewController: HotwireWebViewController {
+final class NativeWebViewController: HotwireWebViewController%NATIVE_GAME_IOS_CONFORMANCE% {%NATIVE_GAME_IOS_WEBVIEW_MEMBERS%
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         let visible = Hotwire.config.pathConfiguration.properties(for: initialVisitableURL)["top_bar"] as? Bool ?? /*###top_bar###*/true/*###top_bar###*/

@@ -13,7 +13,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize"%NATIVE_NOTIF_ANDROID_LAUNCH_MODE%>
+            android:configChanges="orientation|screenSize%NATIVE_GAME_ANDROID_CONFIG_CHANGES%"%NATIVE_NOTIF_ANDROID_LAUNCH_MODE%>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
