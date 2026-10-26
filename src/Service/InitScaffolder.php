@@ -20,6 +20,10 @@ class InitScaffolder
 
     private const TEMPLATE_ADMOB = 'templates/admob';
 
+    private const TEMPLATE_CALENDAR = 'templates/calendar';
+
+    private const TEMPLATE_GAME = 'templates/game';
+
     private const DEFAULT_JAVA_PACKAGE_PATH = 'com/example/nativeapp';
 
     public function __construct(
@@ -32,7 +36,7 @@ class InitScaffolder
     ) {
     }
 
-    public function scaffold(array $overrides, bool $force, bool $offline, SymfonyStyle $io, bool $notification = false, bool $barcodeScanner = false, bool $admob = false): int
+    public function scaffold(array $overrides, bool $force, bool $offline, SymfonyStyle $io, bool $notification = false, bool $barcodeScanner = false, bool $admob = false, bool $calendar = false, bool $game = false): int
     {
         $config = array_merge($this->config, $overrides);
         $projectDir = $this->kernel->getProjectDir();
@@ -68,7 +72,7 @@ class InitScaffolder
             $this->filesystem->remove([$androidTarget, $iosTarget]);
         }
 
-        $tokens = $this->buildTokens($config, $notification, $barcodeScanner, $admob);
+        $tokens = $this->buildTokens($config, $notification, $barcodeScanner, $admob, $calendar, $game);
         $this->mirrorAndSubstitute($androidSource, $androidTarget, $tokens);
         $this->mirrorAndSubstitute($iosSource, $iosTarget, $tokens);
         if ($notification) {
@@ -83,6 +87,14 @@ class InitScaffolder
             $this->mirrorAndSubstitute(Path::join($this->bundleRoot, self::TEMPLATE_ADMOB, 'android'), $androidTarget, $tokens);
             $this->mirrorAndSubstitute(Path::join($this->bundleRoot, self::TEMPLATE_ADMOB, 'ios'), $iosTarget, $tokens);
         }
+        if ($calendar) {
+            $this->mirrorAndSubstitute(Path::join($this->bundleRoot, self::TEMPLATE_CALENDAR, 'android'), $androidTarget, $tokens);
+            $this->mirrorAndSubstitute(Path::join($this->bundleRoot, self::TEMPLATE_CALENDAR, 'ios'), $iosTarget, $tokens);
+        }
+        if ($game) {
+            $this->mirrorAndSubstitute(Path::join($this->bundleRoot, self::TEMPLATE_GAME, 'android'), $androidTarget, $tokens);
+            $this->mirrorAndSubstitute(Path::join($this->bundleRoot, self::TEMPLATE_GAME, 'ios'), $iosTarget, $tokens);
+        }
         $this->relocateAndroidJavaPackage($androidTarget, $config['application_id']);
 
         $gradlew = Path::join($androidTarget, 'gradlew');
@@ -90,7 +102,7 @@ class InitScaffolder
             $this->filesystem->chmod($gradlew, 0755);
         }
 
-        $this->projectUpdater->apply($config, $projectDir, $androidTarget, $iosTarget, $io, $notification, $barcodeScanner, $admob);
+        $this->projectUpdater->apply($config, $projectDir, $androidTarget, $iosTarget, $io, $notification, $barcodeScanner, $admob, $calendar, $game);
 
         $this->resolveIosPackageDependencies($iosTarget, $config, $io);
 
@@ -113,6 +125,13 @@ class InitScaffolder
                 'Bridge admob ajouté : data-controller="bridge--admob" (voir le README du bundle).',
                 'Identifiants d\'app AdMob écrits dans le manifeste. Changez native.admob.android_app_id et native.admob.ios_app_id puis lancez native:update:config.',
             ]);
+        }
+
+        if ($calendar) {
+            $io->note('Bridge calendar ajouté : data-controller="bridge--calendar" et data-action="bridge--calendar#add" (voir le README du bundle).');
+        }
+        if ($game) {
+            $io->note('Bridge game ajouté : data-controller="bridge--game" sur la page du jeu (voir le README du bundle).');
         }
 
         if ($offline) {
@@ -146,11 +165,13 @@ class InitScaffolder
         }
     }
 
-    private function buildTokens(array $config, bool $notification, bool $barcodeScanner, bool $admob): array
+    private function buildTokens(array $config, bool $notification, bool $barcodeScanner, bool $admob, bool $calendar, bool $game): array
     {
         $notificationTokens = self::notificationSnippets();
         $barcodeTokens = self::barcodeSnippets();
         $admobTokens = self::admobSnippets();
+        $calendarTokens = self::calendarSnippets();
+        $gameTokens = self::gameSnippets();
 
         $metadata = '';
         $plist = '';
@@ -162,18 +183,23 @@ class InitScaffolder
             $metadata .= "\n        ".self::admobManifestMetadata();
             $plist .= "\n".self::admobPlistExtra();
         }
+        if ($calendar) {
+            $plist .= "\n".self::calendarPlistExtra();
+        }
 
         return [
             '%NATIVE_APPLICATION_ID%' => $config['application_id'],
             '%NATIVE_BUNDLE_ID%' => $config['bundle_id'],
             '%NATIVE_IOS_TEAM%' => null !== ($config['ios_development_team'] ?? null) ? "\n\t\t\t\tDEVELOPMENT_TEAM = ".$config['ios_development_team'].';'."\n\t\t\t\t\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"Apple Development\";" : '',
-            '%NATIVE_ANDROID_FACTORY_IMPORT%' => ($notification || $barcodeScanner || $admob) ? "\nimport dev.hotwire.core.bridge.BridgeComponentFactory" : '',
+            '%NATIVE_ANDROID_FACTORY_IMPORT%' => ($notification || $barcodeScanner || $admob || $calendar || $game) ? "\nimport dev.hotwire.core.bridge.BridgeComponentFactory" : '',
             '%NATIVE_ANDROID_APP_METADATA%' => $metadata,
             '%NATIVE_IOS_PLIST_EXTRA%' => $plist,
         ]
             + ($notification ? $notificationTokens : array_fill_keys(array_keys($notificationTokens), ''))
             + ($barcodeScanner ? $barcodeTokens : array_fill_keys(array_keys($barcodeTokens), ''))
-            + ($admob ? $admobTokens : array_fill_keys(array_keys($admobTokens), ''));
+            + ($admob ? $admobTokens : array_fill_keys(array_keys($admobTokens), ''))
+            + ($calendar ? $calendarTokens : array_fill_keys(array_keys($calendarTokens), ''))
+            + ($game ? $gameTokens : array_fill_keys(array_keys($gameTokens), ''));
     }
 
     /**
@@ -308,6 +334,23 @@ KTS,
         return "\t<key>GADApplicationIdentifier</key>\n\t<!--###admob_ios_app_id###-->\n\t<string>ca-app-pub-3940256099942544~1458002511</string>\n\t<!--###admob_ios_app_id###-->";
     }
 
+    public static function calendarPlistExtra(): string
+    {
+        $usage = "\t<!--###calendar_usage###-->\n\t<string>Ajouter un événement à votre agenda.</string>\n\t<!--###calendar_usage###-->";
+
+        return "\t<key>NSCalendarsUsageDescription</key>\n".$usage."\n\t<key>NSCalendarsFullAccessUsageDescription</key>\n".$usage;
+    }
+
+    public static function gameAndroidConfigChanges(): string
+    {
+        return '|screenLayout|smallestScreenSize';
+    }
+
+    public static function gamePlistOrientations(): string
+    {
+        return "\n\t\t<string>UIInterfaceOrientationLandscapeLeft</string>\n\t\t<string>UIInterfaceOrientationLandscapeRight</string>";
+    }
+
     public static function barcodeSnippets(): array
     {
         return [
@@ -360,6 +403,83 @@ PBX,
 		};
 PBX,
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function calendarSnippets(): array
+    {
+        return [
+            '%NATIVE_CALENDAR_IOS_COMPONENTS%' => ' + [CalendarComponent.self]',
+            '%NATIVE_CALENDAR_ANDROID_COMPONENTS%' => ', BridgeComponentFactory("calendar", ::CalendarComponent)',
+            '%NATIVE_CALENDAR_PBX_BUILDFILE%' => "\n\t\tB2010000000000000000000D /* CalendarComponent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2010000000000000000001D /* CalendarComponent.swift */; };",
+            '%NATIVE_CALENDAR_PBX_FILEREF%' => "\n\t\tB2010000000000000000001D /* CalendarComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarComponent.swift; sourceTree = \"<group>\"; };",
+            '%NATIVE_CALENDAR_PBX_GROUP%' => "\n\t\t\t\tB2010000000000000000001D /* CalendarComponent.swift */,",
+            '%NATIVE_CALENDAR_PBX_SOURCES%' => "\n\t\t\t\tB2010000000000000000000D /* CalendarComponent.swift in Sources */,",
+        ];
+    }
+
+    /**
+     * The game bridge hides the status bar, the home indicator and the edge gestures through the web view
+     * controller, and opens landscape through the app delegate: both are patched here.
+     *
+     * @return array<string, string>
+     */
+    public static function gameSnippets(): array
+    {
+        return [
+            '%NATIVE_GAME_IOS_COMPONENTS%' => ' + [GameComponent.self]',
+            '%NATIVE_GAME_ANDROID_COMPONENTS%' => ', BridgeComponentFactory("game", ::GameComponent)',
+            '%NATIVE_GAME_ANDROID_CONFIG_CHANGES%' => self::gameAndroidConfigChanges(),
+            '%NATIVE_GAME_GRADLE_DEPS%' => "\n    implementation(\"androidx.swiperefreshlayout:swiperefreshlayout:1.1.0\")",
+            '%NATIVE_GAME_IOS_PLIST_ORIENTATIONS%' => self::gamePlistOrientations(),
+            '%NATIVE_GAME_IOS_ORIENTATION%' => self::gameIosOrientation(),
+            '%NATIVE_GAME_IOS_CONFORMANCE%' => ', GameScreen',
+            '%NATIVE_GAME_IOS_WEBVIEW_MEMBERS%' => self::gameIosWebViewMembers(),
+            '%NATIVE_GAME_PBX_BUILDFILE%' => "\n\t\tB2010000000000000000000E /* GameComponent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2010000000000000000001E /* GameComponent.swift */; };",
+            '%NATIVE_GAME_PBX_FILEREF%' => "\n\t\tB2010000000000000000001E /* GameComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameComponent.swift; sourceTree = \"<group>\"; };",
+            '%NATIVE_GAME_PBX_GROUP%' => "\n\t\t\t\tB2010000000000000000001E /* GameComponent.swift */,",
+            '%NATIVE_GAME_PBX_SOURCES%' => "\n\t\t\t\tB2010000000000000000000E /* GameComponent.swift in Sources */,",
+        ];
+    }
+
+    public static function gameIosOrientation(): string
+    {
+        return <<<'SWIFT'
+
+
+    /// Portrait everywhere; landscape is only opened while a game page is shown (GameComponent).
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        GameMode.orientations
+    }
+SWIFT;
+    }
+
+    public static function gameIosWebViewMembers(): string
+    {
+        return <<<'SWIFT'
+
+    /// A game page is shown (GameComponent): full screen, home indicator faded.
+    var isGame = false {
+        didSet {
+            guard isGame != oldValue else { return }
+            setNeedsStatusBarAppearanceUpdate()
+            setNeedsUpdateOfHomeIndicatorAutoHidden()
+            setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
+            // Containers (tabs, navigation) relay these settings to the visible screen.
+            navigationController?.setNeedsStatusBarAppearanceUpdate()
+            tabBarController?.setNeedsUpdateOfHomeIndicatorAutoHidden()
+            tabBarController?.setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
+        }
+    }
+
+    override var prefersStatusBarHidden: Bool { isGame }
+    override var prefersHomeIndicatorAutoHidden: Bool { isGame }
+    /// While playing, a first swipe from an edge only shows the bar: it does not leave the app.
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { isGame ? .all : [] }
+
+SWIFT;
     }
 
     private function mirrorAndSubstitute(string $source, string $destination, array $tokens): void

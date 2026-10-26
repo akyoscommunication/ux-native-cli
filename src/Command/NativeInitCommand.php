@@ -30,7 +30,9 @@ class NativeInitCommand extends Command
             ->addOption('offline', null, InputOption::VALUE_NONE, 'Active Workbox/PWA (service worker, cache pages, réglages iOS WKAppBoundDomains)')
             ->addOption('notification', null, InputOption::VALUE_NONE, 'Ajoute le bridge notification-token (APNs sur iOS, FCM sur Android)')
             ->addOption('barcode-scanner', null, InputOption::VALUE_NONE, 'Ajoute le bridge barcode-scanner (scan de QR code par le shell natif)')
-            ->addOption('admob', null, InputOption::VALUE_NONE, 'Ajoute le bridge admob (publicités Google AdMob affichées par le shell natif)');
+            ->addOption('admob', null, InputOption::VALUE_NONE, 'Ajoute le bridge admob (publicités Google AdMob affichées par le shell natif)')
+            ->addOption('calendar', null, InputOption::VALUE_NONE, 'Ajoute le bridge calendar (ouvre l\'agenda du téléphone sur un événement pré-rempli)')
+            ->addOption('game', null, InputOption::VALUE_NONE, 'Ajoute le bridge game (paysage et plein écran sur une page de jeu)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -51,6 +53,8 @@ class NativeInitCommand extends Command
             (bool) $input->getOption('notification'),
             (bool) $input->getOption('barcode-scanner'),
             (bool) $input->getOption('admob'),
+            (bool) $input->getOption('calendar'),
+            (bool) $input->getOption('game'),
         );
     }
 }
